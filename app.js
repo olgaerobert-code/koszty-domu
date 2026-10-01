@@ -118,6 +118,7 @@ function blobUrl(path) {
 
 /* ---------- stan ---------- */
 const S = {
+  qr: false,
   token: czytajToken(), zalogowany: false, logowanie: false, cichy: false, bladLogowania: "",
   dane: null, sha: null, gotowe: false, calc: null,
   view: "podsumowanie",
@@ -135,7 +136,7 @@ const nazwaPom = (id) => pom().find((p) => p.id === id)?.nazwa || "Bez pomieszcz
 const nazwaKat = (id) => kat().find((k) => k.id === id)?.nazwa || "Bez kategorii";
 const poz = (id) => pozycje().find((p) => p.id === id);
 
-/* Prognoza pozycji: zakończona = tyle, ile zapłacono; otwarta = plan albo więcej, jeśli zapłacono już ponad plan */
+/* Plan obejmuje to, co już zapłacone: pozycja ma do zapłaty plan minus zapłacone (zakończona: nic) */
 function licz() {
   if (S.calc) return S.calc;
   const m = new Map();
@@ -143,8 +144,7 @@ function licz() {
   for (const pl of platnosci()) { const x = m.get(pl.pozycja); if (x) { x.zapl += pl.kwotaGr || 0; x.n++; } }
   for (const x of m.values()) {
     x.plan = x.p.planGr || 0;
-    x.prog = x.p.zakonczona ? x.zapl : Math.max(x.plan, x.zapl);
-    x.zostalo = x.prog - x.zapl;
+    x.zostalo = x.p.zakonczona ? 0 : Math.max(x.plan - x.zapl, 0);
     x.ponad = x.plan > 0 && x.zapl > x.plan;
     x.bezPlanu = !x.plan;
   }
@@ -152,8 +152,8 @@ function licz() {
   return m;
 }
 function suma(lista) {
-  const s = { plan: 0, zapl: 0, prog: 0, zostalo: 0, n: 0 };
-  for (const x of lista) { s.plan += x.plan; s.zapl += x.zapl; s.prog += x.prog; s.zostalo += x.zostalo; s.n++; }
+  const s = { plan: 0, zapl: 0, zostalo: 0, n: 0 };
+  for (const x of lista) { s.plan += x.plan; s.zapl += x.zapl; s.zostalo += x.zostalo; s.n++; }
   return s;
 }
 const wykonczenie = () => [...licz().values()].filter((x) => !x.p.zakup);
@@ -185,7 +185,7 @@ function tasma(zapl, zostalo, plan, skala) {
 function pigulka(x) {
   if (x.p.zakonczona) return `<span class="pill ok">zakończone</span>`;
   if (x.ponad) return `<span class="pill bad">ponad plan o ${zl(x.zapl - x.plan)}</span>`;
-  if (x.bezPlanu) return `<span class="pill mut">bez planu</span>`;
+  if (x.bezPlanu) return `<span class="pill mut">z budżetu ogólnego</span>`;
   if (!x.zapl) return `<span class="pill mut">nic nie zapłacono</span>`;
   return "";
 }
@@ -246,8 +246,8 @@ function wykresMiesieczny() {
   return `<div class="chart-wrap"><div class="chart-inner"><div class="chart"><div class="plot">${gl}<div class="cols">${cols}</div></div><div class="xl">${xl}</div></div></div></div>${nota}`;
 }
 function wierszGrupy(attr, id, nazwa, s, skala) {
-  const over = s.plan && s.prog > s.plan;
-  const pill = over ? `<span class="pill bad">prognoza ponad plan o ${zl(s.prog - s.plan)}</span>` : s.zostalo ? `<span class="pill mut">zostało ${zl(s.zostalo)}</span>` : `<span class="pill ok">zapłacone</span>`;
+  const over = s.plan && s.zapl > s.plan;
+  const pill = over ? `<span class="pill bad">ponad plan o ${zl(s.zapl - s.plan)}</span>` : s.zostalo ? `<span class="pill mut">zostało ${zl(s.zostalo)}</span>` : `<span class="pill ok">zapłacone</span>`;
   return `<button class="row" type="button" ${attr}="${esc(id)}"><span class="n">${esc(nazwa)}</span><span class="a num">${zl(s.zapl)} <span style="color:var(--muted)">/ ${zl(s.plan)}</span></span>
     ${tasma(s.zapl, s.zostalo, s.plan, skala)}<span class="m"><span>${s.n} poz.</span>${pill}</span></button>`;
 }
@@ -255,37 +255,38 @@ function renderPodsumowanie() {
   const el = $("#v-podsumowanie");
   if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie danych z GitHuba…</div>`; return; }
   const w = wykonczenie(), s = suma(w), sz = suma(zakup());
-  const roznica = s.prog - s.plan;
+  const wBudzecie = s.plan - s.zapl, brak = s.zostalo - wBudzecie;
   let h = `<div class="kpis">
-    <div class="kpi"><span class="lbl">Plan wykończenia</span><span class="v num">${zl(s.plan)}</span><span class="d">${s.n} pozycji</span></div>
-    <div class="kpi"><span class="lbl">Zapłacone</span><span class="v num">${zl(s.zapl)}</span><span class="d">${s.plan ? Math.round((s.zapl / s.plan) * 100) + "% planu" : "&nbsp;"}</span></div>
-    <div class="kpi"><span class="lbl">Zostało do zapłaty</span><span class="v num">${zl(s.zostalo)}</span><span class="d">według planu pozycji</span></div>
-    <div class="kpi"><span class="lbl">Prognoza</span><span class="v num ${roznica > 0 ? "neg" : ""}">${zl(s.prog)}</span><span class="d">${roznica > 0 ? `ponad plan o ${zl(roznica)}` : roznica < 0 ? `poniżej planu o ${zl(-roznica)}` : "równo z planem"}</span></div>
+    <div class="kpi"><span class="lbl">Budżet wykończenia</span><span class="v num">${zl(s.plan)}</span><span class="d">suma planów ${s.n} pozycji</span></div>
+    <div class="kpi"><span class="lbl">Zapłacone</span><span class="v num">${zl(s.zapl)}</span><span class="d">${s.plan ? Math.round((s.zapl / s.plan) * 100) + "% budżetu" : "&nbsp;"}</span></div>
+    <div class="kpi"><span class="lbl">Zostało w budżecie</span><span class="v num ${wBudzecie < 0 ? "neg" : ""}">${zl(wBudzecie)}</span><span class="d">budżet minus zapłacone</span></div>
+    <div class="kpi"><span class="lbl">Do zapłaty wg pozycji</span><span class="v num ${brak > 0 ? "neg" : ""}">${zl(s.zostalo)}</span><span class="d">${brak > 0 ? `o ${zl(brak)} więcej, niż zostało` : brak < 0 ? `zapas ${zl(-brak)}` : "równo z budżetem"}</span></div>
   </div>`;
   if (!s.n) {
     el.innerHTML = h + `<div class="panel empty"><h3>Brak pozycji</h3><p>Dodaj pierwszą pozycję, np. „Meble kuchnia” z planowaną kwotą, a potem podpinaj pod nią płatności.</p><button class="btn pri" type="button" data-nowa-poz>+ Nowa pozycja</button></div>`;
     return;
   }
-  h += `<div class="panel overall"><div class="lbl">Wykończenie · prognoza ${zl(s.prog)}${sz.n ? ` · razem z zakupem domu ${zl(s.prog + sz.zapl)}` : ""}</div>${tasma(s.zapl, s.zostalo, s.plan)}${legenda}</div>`;
+  h += `<div class="panel overall"><div class="lbl">Wykończenie · budżet ${zl(s.plan)}${sz.n ? ` · razem z zakupem domu ${zl(s.plan + sz.zapl)}` : ""}</div>${tasma(s.zapl, Math.max(wBudzecie, 0), s.plan)}${legenda}
+    ${brak > 0 ? `<p class="hint" style="margin:0">Otwarte pozycje potrzebują jeszcze ${zl(s.zostalo)}, a w budżecie zostało ${zl(wBudzecie)}. Różnicę ${zl(brak)} tworzą płatności z pozycji bez własnego planu: ${w.filter((x) => x.bezPlanu && x.zapl).map((x) => esc(x.p.nazwa)).join(", ")}. Jeśli te pieniądze były w planach innych pozycji, przepnij płatności do tamtych pozycji.</p>` : ""}</div>`;
 
   const grupy = (klucz, lista) => {
     const g = new Map();
     for (const x of w) { const k = lista.some((r) => r.id === x.p[klucz]) ? x.p[klucz] : ""; if (!g.has(k)) g.set(k, []); g.get(k).push(x); }
-    return [...g.entries()].map(([id, xs]) => ({ id, s: suma(xs) })).sort((a, b) => b.s.prog - a.s.prog);
+    return [...g.entries()].map(([id, xs]) => ({ id, s: suma(xs) })).sort((a, b) => (b.s.plan || b.s.zapl) - (a.s.plan || a.s.zapl));
   };
   const gp = grupy("pom", pom()), gk = grupy("kat", kat());
-  const maxP = Math.max(...gp.map((g) => g.s.prog), 1), maxK = Math.max(...gk.map((g) => g.s.prog), 1);
+  const maxP = Math.max(...gp.map((g) => Math.max(g.s.plan, g.s.zapl)), 1), maxK = Math.max(...gk.map((g) => Math.max(g.s.plan, g.s.zapl)), 1);
   h += `<div class="grid2">
     <div class="panel"><h2>Pomieszczenia</h2><div class="rows">${gp.map((g) => wierszGrupy("data-fpom", g.id || "-", g.id ? nazwaPom(g.id) : "Bez pomieszczenia", g.s, maxP)).join("")}</div></div>
     <div class="panel"><h2>Kategorie</h2><div class="rows">${gk.map((g) => wierszGrupy("data-fkat", g.id || "-", g.id ? nazwaKat(g.id) : "Bez kategorii", g.s, maxK)).join("")}</div></div>
   </div>`;
 
-  const uwagi = w.filter((x) => !x.p.zakonczona && (x.ponad || (x.bezPlanu && x.zapl))).sort((a, b) => b.zapl - a.zapl);
+  const uwagi = w.filter((x) => x.ponad || (x.bezPlanu && x.zapl)).sort((a, b) => b.zapl - a.zapl);
   const wyk = new Map();
   for (const pl of platnosci()) if (pl.gdzie && !poz(pl.pozycja)?.zakup) wyk.set(pl.gdzie, (wyk.get(pl.gdzie) || 0) + (pl.kwotaGr || 0));
   const wykL = [...wyk.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
   h += `<div class="grid2">
-    <div class="panel"><h2>Wymaga uwagi</h2>${uwagi.length ? `<div class="rows">${uwagi.map((x) => `<button class="row" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span><span class="a num">${zl(x.zapl)}</span><span class="m"><span>${esc(nazwaPom(x.p.pom))}</span>${pigulka(x)}</span></button>`).join("")}</div><p class="hint" style="margin:8px 0 0">Pozycje bez planu podnoszą prognozę. Wpisz im plan albo oznacz jako zakończone.</p>` : `<p class="hint" style="margin:0">Wszystkie pozycje mieszczą się w planie.</p>`}</div>
+    <div class="panel"><h2>Wymaga uwagi</h2>${uwagi.length ? `<div class="rows">${uwagi.map((x) => `<button class="row" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span><span class="a num">${zl(x.zapl)}</span><span class="m"><span>${esc(nazwaPom(x.p.pom))}</span>${pigulka(x)}</span></button>`).join("")}</div><p class="hint" style="margin:8px 0 0">Pozycje ponad planem i płatności spoza planów pozycji. Wszystkie schodzą z budżetu ogólnego.</p>` : `<p class="hint" style="margin:0">Wszystkie płatności mieszczą się w planach pozycji.</p>`}</div>
     <div class="panel"><h2>Wykonawcy i sklepy</h2>${wykL.length ? `<div class="rows">${wykL.map(([g, k]) => `<button class="row" type="button" data-fgdzie="${esc(g)}"><span class="n">${esc(g)}</span><span class="a num">${zl(k)}</span></button>`).join("")}</div>` : `<p class="hint" style="margin:0">Pojawią się, gdy przy płatnościach wpiszesz sklep albo wykonawcę.</p>`}</div>
   </div>`;
   h += `<div class="panel"><h2>Płatności w miesiącach</h2>${wykresMiesieczny()}</div>`;
@@ -388,6 +389,10 @@ function renderUstawienia(force) {
     <div class="panel stack"><div><h2>Kategorie</h2><p class="hint" style="margin:0">Rodzaj prac lub zakupów. Pozwala zobaczyć np. ile łącznie idzie na meble we wszystkich pomieszczeniach.</p></div>
       ${lista("kat", kat())}
       <form class="srow k" id="u-add-kat"><input class="ctl" type="text" placeholder="Nowa kategoria" aria-label="Nowa kategoria"><button class="btn" type="submit">Dodaj</button></form></div>
+  </div>
+  <div class="panel stack">
+    <div><h2>Telefon i inne urządzenia</h2><p class="hint" style="margin:0">Zeskanuj kod aparatem telefonu, a aplikacja otworzy się od razu zalogowana. Kod zawiera klucz do Twoich danych, więc pokazuj go tylko domownikom.</p></div>
+    ${S.qr ? `<div class="qr-box"><div id="qr"></div><div class="stack"><button class="btn" type="button" id="u-kopiuj">Kopiuj link</button><button class="btn link" type="button" id="u-qr-ukryj">Ukryj kod</button></div></div>` : `<div><button class="btn pri" type="button" id="u-qr">Pokaż kod QR</button></div>`}
   </div>
   <div class="panel stack">
     <div><h2>Kopia i historia</h2><p class="hint" style="margin:0">Każdy zapis to osobna wersja w prywatnym repozytorium <a href="${repoUrl}/commits/${REPO_DANE.branch}" target="_blank" rel="noopener">${REPO_DANE.repo}</a>, więc każdą zmianę da się podejrzeć i cofnąć. Pliki CSV otworzysz w Excelu i Google Sheets.</p></div>
@@ -575,12 +580,23 @@ function zamknij(anulowano) {
   S.sheet = null; $("#veil").hidden = true; document.body.style.overflow = "";
 }
 
+const linkUrzadzenia = () => `${location.origin}${location.pathname}#klucz=${S.token}`;
+function rysujQr() {
+  const rysuj = () => { const el = $("#qr"); if (!el) return; el.innerHTML = ""; new window.QRCode(el, { text: linkUrzadzenia(), width: 220, height: 220, colorDark: "#1b211f", colorLight: "#ffffff", correctLevel: window.QRCode.CorrectLevel.M }); };
+  if (window.QRCode) return rysuj();
+  const sc = document.createElement("script");
+  sc.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
+  sc.onload = rysuj; sc.onerror = () => toast("Nie udało się wczytać generatora kodu QR. Użyj „Kopiuj link”.");
+  document.head.append(sc);
+}
+
 /* ---------- logowanie ---------- */
 function renderLogin() {
   const el = $("#v-login");
   if (S.logowanie && S.cichy) { el.innerHTML = `<div class="banner">Łączenie z GitHubem…</div>`; return; }
   el.innerHTML = `<div class="panel stack login">
-    <div><h2>Połącz z GitHubem</h2><p style="margin:0">Dane leżą w Twoim prywatnym repozytorium <strong>${REPO_DANE.repo}</strong>. Żeby aplikacja mogła je czytać i zapisywać, wklej token. Na każdym urządzeniu robisz to raz.</p></div>
+    <div><h2>Połącz z GitHubem</h2><p style="margin:0"><strong>Aplikacja działa już na innym urządzeniu?</strong> Otwórz tam zakładkę „Ustawienia” → „Pokaż kod QR” i zeskanuj kod tym telefonem. Nic nie wklejasz.</p></div>
+    <p style="margin:0">Pierwsze uruchomienie (raz, najlepiej na komputerze): dane leżą w Twoim prywatnym repozytorium <strong>${REPO_DANE.repo}</strong>, a aplikacja potrzebuje do nich klucza.</p>
     <ol class="steps">
       <li>Otwórz <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a> (zalogowany jako ${REPO_DANE.owner}).</li>
       <li><b>Token name:</b> koszty-domu + nazwa urządzenia, np. „koszty-domu telefon”.</li>
@@ -678,6 +694,9 @@ function wire() {
     if (t.id === "u-csv-poz") { csvPozycje(); return; }
     if (t.id === "u-csv-pl") { csvPlatnosci(); return; }
     if (t.id === "u-logout") { wyloguj(); return; }
+    if (t.id === "u-qr") { S.qr = true; renderUstawienia(true); rysujQr(); return; }
+    if (t.id === "u-qr-ukryj") { S.qr = false; renderUstawienia(true); return; }
+    if (t.id === "u-kopiuj") { navigator.clipboard?.writeText(linkUrzadzenia()).then(() => toast("Skopiowano link. Otwórz go na drugim urządzeniu."), () => toast("Nie udało się skopiować.")); return; }
   });
   document.addEventListener("change", (ev) => {
     const t = ev.target;
@@ -738,6 +757,8 @@ async function usunSlownik() {
 /* ---------- start ---------- */
 try { const v = localStorage.getItem("kd-view"); if (WIDOKI.includes(v)) S.view = v; } catch {}
 const h = location.hash.slice(1); if (WIDOKI.includes(h)) S.view = h;
+const zLinku = h.match(/^klucz=([A-Za-z0-9_]+)$/);
+if (zLinku) { S.token = zLinku[1]; history.replaceState(null, "", location.pathname + location.search); }
 wire(); render();
 if (S.token) { S.cichy = true; zaloguj(S.token); } else sync("off", "Niepołączone");
 })();

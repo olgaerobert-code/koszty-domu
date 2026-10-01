@@ -233,6 +233,9 @@ a { color: var(--focus); }
 .pl-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .sheet .wyd { grid-template-columns: 70px minmax(0, 1fr) auto; }
 .wyd { grid-template-columns: 70px minmax(0, 1fr) auto; }
+.qr-box { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+#qr { background: #fff; padding: 10px; border-radius: 6px; line-height: 0; }
+#qr img, #qr canvas { display: block; }
 .steps { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
 </style>
 </head>
@@ -250,7 +253,7 @@ a { color: var(--focus); }
     <button role="tab" id="t-podsumowanie" data-v="podsumowanie" aria-selected="true">Podsumowanie</button>
     <button role="tab" id="t-pozycje" data-v="pozycje" aria-selected="false">Pozycje</button>
     <button role="tab" id="t-platnosci" data-v="platnosci" aria-selected="false">Płatności</button>
-    <button role="tab" id="t-ustawienia" data-v="ustawienia" aria-selected="false">Listy</button>
+    <button role="tab" id="t-ustawienia" data-v="ustawienia" aria-selected="false">Ustawienia</button>
   </nav>
 </header>
 
