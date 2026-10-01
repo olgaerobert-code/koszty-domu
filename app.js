@@ -397,7 +397,7 @@ function renderUstawienia(force) {
   <div class="panel stack">
     <div><h2>Kopia i historia</h2><p class="hint" style="margin:0">Każdy zapis to osobna wersja w prywatnym repozytorium <a href="${repoUrl}/commits/${REPO_DANE.branch}" target="_blank" rel="noopener">${REPO_DANE.repo}</a>, więc każdą zmianę da się podejrzeć i cofnąć. Pliki CSV otworzysz w Excelu i Google Sheets.</p></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="u-csv-poz">CSV: pozycje</button><button class="btn" type="button" id="u-csv-pl">CSV: płatności</button><button class="btn" type="button" id="u-logout">Wyloguj to urządzenie</button></div>
-  </div>`;
+  </div>`;  if (S.qr) rysujQr();
 }
 function pobierzCsv(nazwa, rows) {
   const q = (v) => { v = String(v ?? ""); return /[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
