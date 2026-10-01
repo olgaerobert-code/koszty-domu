@@ -341,7 +341,7 @@ function wynikiListy() {
   const pakF = f.stan.startsWith("pakiet:") ? f.stan.slice(7) : "";
   const l = [...licz().values()].sort((a, b) => (a.p.zakup ? 1 : 0) - (b.p.zakup ? 1 : 0)).filter((x) =>
     (!f.pom || x.p.pom === f.pom) &&
-    (pakF ? x.p.pakiet === pakF : !f.stan || (f.stan === "otwarte" ? x.zostalo > 0 : f.stan === "uwaga" ? x.ponad || (x.bezPlanu && x.zapl) || S.pakiety.get(x.p.pakiet)?.ponad : f.stan === "zakonczone" ? x.p.zakonczona : true)) &&
+    (pakF ? x.p.pakiet === pakF : !f.stan || (f.stan === "otwarte" ? x.zostalo > 0 : f.stan === "uwaga" ? !x.p.zakup && (x.ponad || (x.bezPlanu && x.zapl) || S.pakiety.get(x.p.pakiet)?.ponad) : f.stan === "zakonczone" ? x.p.zakonczona : true)) &&
     (!q || [x.p.nazwa, x.p.notatka, nazwaPom(x.p.pom), nazwaKat(x.p.kat), ...(x.p.produkty || []).map((p) => p.nazwa + " " + p.model)].join(" ").toLowerCase().includes(q)));
   const s = suma(l.filter((x) => !x.p.zakup));
   if (!l.length) return `<p class="pusto">Nic tu nie pasuje. Zmień filtry albo wyszukiwanie.</p>`;
