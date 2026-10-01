@@ -1,0 +1,73 @@
+<title>Ikona Koszty domu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap">
+<style>
+/* Układ: porównanie „było” z czterema poprawionymi domkami, pod spodem podgląd na jasnej i ciemnej tapecie iPhone'a w rozmiarze 60 px */
+:root {
+  --tlo: #EFEFF3; --karta: #FFFFFF; --tekst: #000000; --tekst-2: #55555C;
+  --f-disp: "Bricolage Grotesque", "Plus Jakarta Sans", system-ui, sans-serif;
+  --f-tekst: "Plus Jakarta Sans", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --tlo: #16161A; --karta: #222228; --tekst: #F2F2F5; --tekst-2: #A7A7B0; color-scheme: dark; } }
+:root[data-theme="dark"] { --tlo: #16161A; --karta: #222228; --tekst: #F2F2F5; --tekst-2: #A7A7B0; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--tlo); color: var(--tekst); font: 15px/1.5 var(--f-tekst); }
+.wrap { max-width: 980px; margin: 0 auto; padding: 28px 16px 48px; }
+h1 { font: 800 clamp(30px, 6vw, 44px)/1.05 var(--f-disp); letter-spacing: -.02em; margin: 0 0 8px; }
+.lead { margin: 0 0 24px; color: var(--tekst-2); max-width: 62ch; }
+.siatka { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+.prop { background: var(--karta); border-radius: 26px; padding: 18px; display: grid; gap: 10px; align-content: start; }
+.prop svg { width: 100%; max-width: 160px; height: auto; border-radius: 22.37%; display: block; box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+.prop.bylo { opacity: .75; }
+.etyk { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.nr { width: 28px; height: 28px; display: grid; place-items: center; font: 800 14px/1 var(--f-disp); background: var(--tekst); color: var(--karta); border-radius: 50%; flex: none; }
+.bylo .nr { background: transparent; color: var(--tekst-2); box-shadow: inset 0 0 0 1.5px var(--tekst-2); }
+.polec { font-size: 12px; font-weight: 700; background: #F8DA6B; color: #000; border-radius: 99px; padding: 3px 9px; }
+.prop h2 { margin: 0; font: 700 19px/1.15 var(--f-disp); }
+.prop p { margin: 0; font-size: 13.5px; color: var(--tekst-2); }
+h3 { font: 700 22px/1.1 var(--f-disp); margin: 40px 0 12px; }
+.tele { display: flex; flex-wrap: wrap; gap: 14px; }
+.tel { width: min(100%, 340px); border-radius: 44px; padding: 30px 20px 34px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px 8px; }
+.tel.jasna { background: linear-gradient(160deg, #F5E9DA, #E9DDF3 55%, #D7E6F5); color: #000; }
+.tel.ciemna { background: linear-gradient(160deg, #3B3F63, #1E2033 60%, #2A2440); color: #fff; }
+.app { display: grid; justify-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; text-align: center; }
+.app svg { width: 60px; height: 60px; border-radius: 13.4px; display: block; }
+</style>
+
+<div class="wrap">
+  <h1>Poprawiony domek</h1>
+  <p class="lead">W poprzedniej wersji ostry dach i jedna gruba czarna bryła nie pasowały do miękkich, zaokrąglonych kształtów aplikacji, a drzwi na środku wyglądały jak dziurka od klucza. Teraz rogi są zaokrąglone jak karty w aplikacji, jest komin, drzwi są niżej i z boku, a obok okno w drugim pastelu.</p>
+
+  <div class="siatka">
+    <div class="prop bylo"><span class="etyk"><span class="nr">1</span><span>było</span></span>
+      <svg viewBox="0 0 100 100" role="img" aria-label="Poprzednia wersja"><rect width="100" height="100" fill="#C8C4F4"/><path d="M50 21.5 79 45.5V76a5 5 0 0 1-5 5H26a5 5 0 0 1-5-5V45.5Z" fill="#000" stroke="#000" stroke-width="4" stroke-linejoin="round"/><rect x="42" y="56" width="16" height="25" rx="8" fill="#F8DA6B"/></svg>
+      <h2>Poprzedni</h2><p>Dla porównania.</p></div>
+
+    <div class="prop"><span class="etyk"><span class="nr">A</span><span class="polec">polecam</span></span>
+      <svg viewBox="0 0 100 100" role="img" aria-label="Wariant A: miękki czarny domek z kominem, żółtymi drzwiami i różowym okrągłym oknem na lawendzie"><rect width="100" height="100" fill="#C8C4F4"/><g transform="translate(50 53) scale(1.2) translate(-50 -53)"><rect x="60.5" y="26" width="9" height="20" rx="4.5" fill="#000"/><path d="M50 33 72 51V73H28V51Z" fill="#000" stroke="#000" stroke-width="13" stroke-linejoin="round"/><rect x="36" y="59" width="13" height="20.5" rx="6.5" fill="#F8DA6B"/><circle cx="62" cy="62" r="6.5" fill="#F6B9D6"/></g></svg>
+      <h2>Miękki domek</h2><p>Zaokrąglony jak karty w aplikacji. Żółte drzwi i różowe okno to dwa pastele z kafli pomieszczeń.</p></div>
+
+    <div class="prop"><span class="etyk"><span class="nr">B</span></span>
+      <svg viewBox="0 0 100 100" role="img" aria-label="Wariant B: miękki czarny domek z żółtym kółkiem postępu na lawendzie"><rect width="100" height="100" fill="#C8C4F4"/><g transform="translate(50 53) scale(1.2) translate(-50 -53)"><rect x="60.5" y="26" width="9" height="20" rx="4.5" fill="#000"/><path d="M50 33 72 51V73H28V51Z" fill="#000" stroke="#000" stroke-width="13" stroke-linejoin="round"/><circle cx="50" cy="62" r="10.5" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="5.5"/><circle cx="50" cy="62" r="10.5" fill="none" stroke="#F8DA6B" stroke-width="5.5" stroke-linecap="round" stroke-dasharray="46 66" transform="rotate(-90 50 62)"/></g></svg>
+      <h2>Domek z kółkiem</h2><p>Zamiast drzwi kółko postępu, takie jak przy pozycjach. Najbardziej „ta” aplikacja.</p></div>
+
+    <div class="prop"><span class="etyk"><span class="nr">C</span></span>
+      <svg viewBox="0 0 100 100" role="img" aria-label="Wariant C: biały domek z czarnym obrysem, czarnymi drzwiami i żółtym oknem na lawendzie"><rect width="100" height="100" fill="#C8C4F4"/><g transform="translate(50 53) scale(1.2) translate(-50 -53)"><rect x="60.5" y="26" width="9" height="20" rx="4.5" fill="#000"/><path d="M50 33 72 51V73H28V51Z" fill="#000" stroke="#000" stroke-width="13" stroke-linejoin="round"/><path d="M50 38.5 67 52.5V71.5H33V52.5Z" fill="#fff" stroke="#fff" stroke-width="6" stroke-linejoin="round"/><rect x="36.5" y="60" width="12" height="19.5" rx="6" fill="#000"/><circle cx="61" cy="61" r="5.5" fill="#F8DA6B"/></g></svg>
+      <h2>Jasny domek</h2><p>Biały środek jak białe karty w aplikacji, czarny obrys. Lżejszy, mniej masywny.</p></div>
+
+    <div class="prop"><span class="etyk"><span class="nr">D</span></span>
+      <svg viewBox="0 0 100 100" role="img" aria-label="Wariant D: miękki czarny domek z lawendowymi drzwiami i różowym oknem na żółtym tle"><rect width="100" height="100" fill="#F8DA6B"/><g transform="translate(50 53) scale(1.2) translate(-50 -53)"><rect x="60.5" y="26" width="9" height="20" rx="4.5" fill="#000"/><path d="M50 33 72 51V73H28V51Z" fill="#000" stroke="#000" stroke-width="13" stroke-linejoin="round"/><rect x="36" y="59" width="13" height="20.5" rx="6.5" fill="#C8C4F4"/><circle cx="62" cy="62" r="6.5" fill="#F6B9D6"/></g></svg>
+      <h2>Na żółtym</h2><p>Wariant A na żółtym tle. Mocniej wyróżnia się na ekranie, zwłaszcza na ciemnej tapecie.</p></div>
+  </div>
+
+  <h3>Na ekranie iPhone'a</h3>
+  <div class="tele"><div class="tel jasna" id="tel1"></div><div class="tel ciemna" id="tel2"></div></div>
+</div>
+<script>
+const ikony = [...document.querySelectorAll(".prop svg")];
+const nazwy = ["było", "A", "B", "C", "D"];
+const html = ikony.map((s, i) => `<div class="app">${s.outerHTML.replace(/role="img" aria-label="[^"]*"/, 'aria-hidden="true"')}<span>${nazwy[i]}</span></div>`).join("");
+document.getElementById("tel1").innerHTML = html;
+document.getElementById("tel2").innerHTML = html;
+</script>

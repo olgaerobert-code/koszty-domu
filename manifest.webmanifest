@@ -8,7 +8,7 @@
   "theme_color": "#EFEFF3",
   "lang": "pl",
   "icons": [
-    { "src": "ikona-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "ikona-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "ikona-dom-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "ikona-dom-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ]
 }
