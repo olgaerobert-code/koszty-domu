@@ -252,19 +252,27 @@ function renderPodsumowanie() {
   const el = $("#v-podsumowanie");
   if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie danych z GitHuba…</div>`; return; }
   const w = wykonczenie(), s = suma(w), sz = suma(zakup());
-  const wBudzecie = s.plan - s.zapl, brak = s.zostalo - wBudzecie;
+  /* Budżet = kwota wpisana przez Roberta (ile ma pieniędzy). Dopóki jej nie ma, liczymy od sumy planów pozycji. */
+  const wpisany = S.dane.ustawienia.budzetGr || 0, budzet = wpisany || s.plan;
+  const pieniadze = budzet - s.zapl, brak = s.zostalo - pieniadze;
+  const kafelBudzetu = S.edytujBudzet
+    ? `<form class="kpi" id="form-budzet"><label class="lbl" for="b-kwota">Budżet wykończenia</label><input class="ctl kw" id="b-kwota" inputmode="decimal" value="${wpisany ? f0.format(wpisany / 100) : ""}" placeholder="ile masz pieniędzy"><span class="d" style="display:flex;gap:6px"><button class="btn pri" type="submit">Zapisz</button><button class="btn" type="button" id="b-anuluj">Anuluj</button></span></form>`
+    : `<div class="kpi"><span class="lbl">Budżet wykończenia</span><span class="v num">${wpisany ? zl(wpisany) : "—"}</span><span class="d">${wpisany ? `plany pozycji: ${zl(s.plan)} · ` : ""}<button class="btn link" type="button" id="b-edytuj" style="padding:0">${wpisany ? "zmień" : "Wpisz, ile masz pieniędzy"}</button></span></div>`;
   let h = `<div class="kpis">
-    <div class="kpi"><span class="lbl">Budżet wykończenia</span><span class="v num">${zl(s.plan)}</span><span class="d">suma planów ${s.n} pozycji</span></div>
-    <div class="kpi"><span class="lbl">Zapłacone</span><span class="v num">${zl(s.zapl)}</span><span class="d">${s.plan ? Math.round((s.zapl / s.plan) * 100) + "% budżetu" : "&nbsp;"}</span></div>
-    <div class="kpi"><span class="lbl">Zostało w budżecie</span><span class="v num ${wBudzecie < 0 ? "neg" : ""}">${zl(wBudzecie)}</span><span class="d">budżet minus zapłacone</span></div>
-    <div class="kpi"><span class="lbl">Do zapłaty wg pozycji</span><span class="v num ${brak > 0 ? "neg" : ""}">${zl(s.zostalo)}</span><span class="d">${brak > 0 ? `o ${zl(brak)} więcej, niż zostało` : brak < 0 ? `zapas ${zl(-brak)}` : "równo z budżetem"}</span></div>
+    ${kafelBudzetu}
+    <div class="kpi"><span class="lbl">Zapłacone</span><span class="v num">${zl(s.zapl)}</span><span class="d">${budzet ? Math.round((s.zapl / budzet) * 100) + "% budżetu" : "&nbsp;"}</span></div>
+    <div class="kpi"><span class="lbl">${wpisany ? "Zostało pieniędzy" : "Zostało w planach"}</span><span class="v num ${pieniadze < 0 ? "neg" : ""}">${zl(pieniadze)}</span><span class="d">${wpisany ? "budżet minus zapłacone" : "suma planów minus zapłacone"}</span></div>
+    <div class="kpi"><span class="lbl">Potrzeba jeszcze</span><span class="v num ${brak > 0 ? "neg" : ""}">${zl(s.zostalo)}</span><span class="d">${brak > 0 ? `brakuje ${zl(brak)}` : brak < 0 ? `zapas ${zl(-brak)}` : "na styk"}</span></div>
   </div>`;
   if (!s.n) {
     el.innerHTML = h + `<div class="panel empty"><h3>Brak pozycji</h3><p>Dodaj pierwszą pozycję, np. „Meble kuchnia” z planowaną kwotą, a potem podpinaj pod nią płatności.</p><button class="btn pri" type="button" data-nowa-poz>+ Nowa pozycja</button></div>`;
     return;
   }
-  h += `<div class="panel overall"><div class="lbl">Wykończenie · budżet ${zl(s.plan)}${sz.n ? ` · razem z zakupem domu ${zl(s.plan + sz.zapl)}` : ""}</div>${tasma(s.zapl, Math.max(wBudzecie, 0), s.plan)}${legenda}
-    ${brak > 0 ? `<p class="hint" style="margin:0">Otwarte pozycje potrzebują jeszcze ${zl(s.zostalo)}, a w budżecie zostało ${zl(wBudzecie)}. Różnicę ${zl(brak)} tworzą płatności z pozycji bez własnego planu: ${w.filter((x) => x.bezPlanu && x.zapl).map((x) => esc(x.p.nazwa)).join(", ")}. Jeśli te pieniądze były w planach innych pozycji, przepnij płatności do tamtych pozycji.</p>` : ""}</div>`;
+  const bezPlanu = w.filter((x) => x.bezPlanu && x.zapl);
+  h += `<div class="panel overall"><div class="lbl">Wykończenie · ${wpisany ? "budżet" : "plany pozycji"} ${zl(budzet)}${sz.n ? ` · razem z zakupem domu ${zl(budzet + sz.zapl)}` : ""}</div>${tasma(s.zapl, s.zostalo, budzet)}${legenda}
+    ${wpisany
+      ? `<p class="hint" style="margin:0">Otwarte pozycje potrzebują jeszcze ${zl(s.zostalo)}, a zostało ${zl(pieniadze)}. ${brak > 0 ? `Brakuje ${zl(brak)}.` : `Zostaje zapas ${zl(-brak)}.`} Plany wszystkich pozycji razem: ${zl(s.plan)}${s.plan > wpisany ? `, czyli o ${zl(s.plan - wpisany)} więcej niż budżet` : ""}.</p>`
+      : brak > 0 ? `<p class="hint" style="margin:0">Otwarte pozycje potrzebują jeszcze ${zl(s.zostalo)}, a w planach zostało ${zl(pieniadze)}. Różnicę ${zl(brak)} tworzą płatności z pozycji bez własnego planu: ${bezPlanu.map((x) => esc(x.p.nazwa)).join(", ")}. Wpisz budżet, żeby porównać to z pieniędzmi, które masz.</p>` : ""}</div>`;
 
   const grupy = (klucz, lista) => {
     const g = new Map();
@@ -673,7 +681,7 @@ async function wczytaj() {
   }
 }
 async function odswiez() {
-  if (zajete || S.sheet || document.visibilityState !== "visible") return;
+  if (zajete || S.sheet || S.edytujBudzet || document.visibilityState !== "visible") return;
   if (!S.gotowe) return wczytaj();
   try { const p = await pobierz(); if (p.wersja !== S.wersja && !zajete && !S.sheet) { S.wersja = p.wersja; ustawDane(p.dane); } sync("ok", "Aktualne"); }
   catch (e) { sync("err", e?.code === "siec" ? "Brak internetu" : "Brak połączenia"); }
@@ -718,6 +726,8 @@ function wire() {
     const pozB = t.closest("[data-poz]"); if (pozB) { otworzPoz(pozB.dataset.poz); return; }
     const nPl = t.closest("[data-nowa-pl]"); if (nPl) { otworzPl(null, nPl.dataset.nowaPl, nPl.dataset.nowaPl); return; }
     if (t.closest("[data-nowa-poz]")) { otworzPoz(null); return; }
+    if (t.id === "b-edytuj") { S.edytujBudzet = true; renderPodsumowanie(); setTimeout(() => $("#b-kwota")?.focus(), 20); return; }
+    if (t.id === "b-anuluj") { S.edytujBudzet = false; renderPodsumowanie(); return; }
     const np = t.closest("[data-nowy-prod]"); if (np) { otworzProd(np.dataset.nowyProd, null); return; }
     const pr = t.closest("[data-prod]"); if (pr) { const [a, b] = pr.dataset.prod.split("|"); otworzProd(a, b); return; }
     const kp = t.closest("[data-kup]"); if (kp) { const [a, b] = kp.dataset.kup.split("|"); kupProdukt(a, b); return; }
@@ -756,6 +766,13 @@ function wire() {
     if (f.id === "form-poz") { zapiszPoz(); return; }
     if (f.id === "form-pl") { zapiszPl(false); return; }
     if (f.id === "form-prod") { zapiszProd(); return; }
+    if (f.id === "form-budzet") {
+      const txt = $("#b-kwota").value.trim(), v = txt ? parseKwota(txt) : 0;
+      if (v === null || v < 0) { toast("Wpisz kwotę liczbą, np. 400000."); return; }
+      S.edytujBudzet = false;
+      zmien(v ? `Budżet wykończenia: ${zl(v)}` : "Usunięto kwotę budżetu", (d) => { if (v) d.ustawienia.budzetGr = v; else delete d.ustawienia.budzetGr; }).then(() => toast(v ? `Budżet: ${zl(v)}` : "Budżet liczony z planów pozycji."), bladZapisu);
+      renderPodsumowanie(); return;
+    }
     if (f.id === "u-add-pom" || f.id === "u-add-kat" || f.id === "u-add-pak") {
       const inp = f.querySelector("input"), n = inp.value.trim(); if (!n) return;
       const typ = f.id.slice(6);
