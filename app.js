@@ -195,7 +195,7 @@ const kw = (gr) => `${f0.format(Math.round((gr || 0) / 100))}<small> zł</small>
 function pasek(zapl, zostalo, plan) {
   const max = Math.max(plan, zapl + zostalo, 1);
   const a = (zapl / max) * 100, b = (zostalo / max) * 100;
-  return `<div class="bar" role="img" aria-label="Zapłacone ${zl(zapl)}, zostało ${zl(zostalo)}">${zapl ? `<i class="z" style="width:${a}%"></i>` : ""}${zostalo ? `<i class="r" style="width:${b}%"></i>` : ""}${plan && zapl > plan ? `<b class="lim" style="left:${(plan / max) * 100}%"></b>` : ""}</div>`;
+  return `<div class="bar" role="img" aria-label="Wydane ${zl(zapl)}, zostało ${zl(zostalo)}">${zapl ? `<i class="z" style="width:${a}%"></i>` : ""}${zostalo ? `<i class="r" style="width:${b}%"></i>` : ""}${plan && zapl > plan ? `<b class="lim" style="left:${(plan / max) * 100}%"></b>` : ""}</div>`;
 }
 function stanPozycji(x) {
   if (x.wPakiecie) return `<span class="tag">pakiet ${esc(x.wPakiecie.nazwa.split(":")[0])}</span>`;
@@ -212,7 +212,7 @@ function kolkoPozycji(x) {
   if (!x.plan) return `<span class="kolko" style="--k:${tlo}"><b>zł</b></span>`;
   if (zle) return `<span class="kolko kolko-zle">!</span>`;
   const proc = x.plan ? Math.min(Math.round((x.zapl / x.plan) * 100), 100) : 0, r = 19, c = 2 * Math.PI * r;
-  return `<span class="kolko" style="--k:${tlo}"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="${r}" class="kolko-t"/>${proc ? `<circle cx="24" cy="24" r="${r}" class="kolko-v" stroke-dasharray="${(c * proc) / 100} ${c}" transform="rotate(-90 24 24)"/>` : ""}</svg><b class="${proc ? "" : "zero"}">${proc}%</b></span>`;
+  return `<span class="kolko" style="--k:${tlo}" role="img" aria-label="Wydane ${proc}% planu"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="${r}" class="kolko-t"/>${proc ? `<circle cx="24" cy="24" r="${r}" class="kolko-v" stroke-dasharray="${(c * proc) / 100} ${c}" transform="rotate(-90 24 24)"/>` : ""}</svg><b class="${proc ? "" : "zero"}">${proc}%</b></span>`;
 }
 function wierszPozycji(x, gdzie) {
   const kat = nazwaKat(x.p.kat), pod = [gdzie ? (x.p.zakup ? "Zakup domu" : nazwaPom(x.p.pom)) : "", kat && kat !== x.p.nazwa ? kat : "", x.p.produkty?.length ? `${x.p.produkty.length} prod.` : ""].filter(Boolean);
@@ -244,11 +244,11 @@ function ekranDom() {
   const d = new Date();
   let h = `<header class="top dom-top"><div><p class="powitanie">Dom, ${d.getDate()} ${["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września", "października", "listopada", "grudnia"][d.getMonth()]}</p><h1>Wykończenie</h1></div><span class="sync" id="sync" data-s="ok"></span></header>`;
   h += `<section class="hero">
-    <div class="hero-g"><div><p class="hero-l">Wydane</p><p class="hero-v">${kw(s.zapl)}</p><p class="hero-s">z ${zl(budzet)} ${wpisany ? "budżetu" : "w planach"}</p></div><div class="hero-r">${pierscien(proc)}<span>${proc}%</span></div></div>
+    <div class="hero-g"><div><p class="hero-l">Wydane</p><p class="hero-v">${kw(s.zapl)}</p><p class="hero-s">z ${zl(budzet)} ${wpisany ? "budżetu" : "w planach"}</p></div><div class="hero-r">${pierscien(proc)}<span class="${proc >= 100 ? "duzo" : ""}">${proc}%</span></div></div>
   </section>
   <div class="duo">
-    <button class="mini mini-y" type="button" data-budzet>${wpisany ? `<p class="mini-l">Zostało pieniędzy</p><p class="mini-v ${pieniadze < 0 ? "zle" : ""}">${kw(pieniadze)}</p><p class="mini-s">budżet ${zl(wpisany)}</p>` : `<p class="mini-l">Ile masz pieniędzy?</p><p class="mini-v">Wpisz budżet</p><p class="mini-s">porównam z planami</p>`}</button>
-    <div class="mini mini-w"><p class="mini-l">Potrzeba jeszcze</p><p class="mini-v">${kw(s.zostalo)}</p><p class="mini-s ${brak > 0 ? "zle" : "ok"}">${brak > 0 ? `brakuje ${zl(brak)}` : `zapas ${zl(-brak)}`}</p></div>
+    <button class="mini mini-y" type="button" data-budzet>${wpisany ? `<p class="mini-l">Zostało pieniędzy</p><p class="mini-v ${pieniadze < 0 ? "zle" : ""}">${kw(pieniadze)}</p><p class="mini-s">budżet ${zl(wpisany)}</p>` : `<p class="mini-l">Ile masz pieniędzy?</p><p class="mini-v">Wpisz budżet</p><p class="mini-s">żeby porównać z planami</p>`}</button>
+    <div class="mini mini-w"><p class="mini-l">Zostało do wydania</p><p class="mini-v">${kw(s.zostalo)}</p><p class="mini-s ${brak > 0 ? "zle" : "ok"}">${brak > 0 ? `brakuje ${zl(brak)}` : `zapas ${zl(-brak)}`}</p></div>
   </div>`;
   const uwagi = w.filter((x) => x.ponad || (x.bezPlanu && x.zapl));
   const pakPonad = [...S.pakiety.values()].filter((g) => g.ponad);
@@ -268,7 +268,7 @@ function ekranDom() {
     </a>`).join("")}</div>`;
   if (S.pakiety.size) h += `<div class="sekcja-h"><h2>Pakiety</h2></div>${[...S.pakiety.values()].map((g) => `
     <a class="pakiet" href="#lista/pakiet:${esc(g.pk.id)}"><span class="pakiet-g"><span class="pakiet-n">${esc(g.pk.nazwa)}</span><span class="pakiet-v">${kw(g.zostalo)}</span></span>
-    <span class="pakiet-s">${g.xs.map((x) => esc(x.p.nazwa)).join(", ")}<br>zapłacone ${zl(g.zapl)} z ${zl(g.plan)}</span>${pasek(g.zapl, g.zostalo, g.plan)}</a>`).join("")}`;
+    <span class="pakiet-s">${g.xs.map((x) => esc(x.p.nazwa)).join(", ")}<br>wydane ${zl(g.zapl)} z ${zl(g.plan)}</span>${pasek(g.zapl, g.zostalo, g.plan)}</a>`).join("")}`;
   const wyk = new Map();
   for (const pl of platnosci()) if (pl.gdzie && !poz(pl.pozycja)?.zakup) wyk.set(pl.gdzie, (wyk.get(pl.gdzie) || 0) + (pl.kwotaGr || 0));
   if (wyk.size) h += `<div class="sekcja-h"><h2>Komu płacisz</h2><a class="lnk" href="#platnosci">Wszystkie</a></div><div class="karta lista-p">${[...wyk.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([g, k]) => `<a class="wk" href="#platnosci/${encodeURIComponent(g)}"><span>${esc(g)}</span><span class="num">${kw(k)}</span></a>`).join("")}</div>`;
@@ -282,14 +282,14 @@ function ekranPom(id) {
   if (!r) return naglowek("Nie ma takiego pomieszczenia", "#dom");
   const xs = wykonczenie().filter((x) => x.p.pom === id), s = suma(xs);
   let h = naglowek(esc(r.nazwa), "#dom");
-  h += `<section class="hero" style="--k:${kolorPom(id)}"><div class="hero-g"><div><p class="hero-l">Do wydania</p><p class="hero-v">${kw(s.zostalo)}</p><p class="hero-s">zapłacone ${zl(s.zapl)} z ${zl(s.plan)}</p></div><span class="okr-b duza">${ikonaPom(id)}</span></div>${pasek(s.zapl, s.zostalo, s.plan)}</section>`;
+  h += `<section class="hero" style="--k:${kolorPom(id)}"><div class="hero-g"><div><p class="hero-l">Zostało do wydania</p><p class="hero-v">${kw(s.zostalo)}</p><p class="hero-s">wydane ${zl(s.zapl)} z ${zl(s.plan)}</p></div><span class="okr-b duza">${ikonaPom(id)}</span></div>${pasek(s.zapl, s.zostalo, s.plan)}</section>`;
   const luzne = xs.filter((x) => !x.wPakiecie);
   const pakiety = [...new Set(xs.filter((x) => x.wPakiecie).map((x) => x.wPakiecie.id))].map((pid) => S.pakiety.get(pid));
   h += `<div class="sekcja-h"><h2>Pozycje</h2><span class="szary">${xs.length}</span></div>`;
   if (luzne.length) h += `<div class="karta lista-poz">${luzne.map((x) => wierszPozycji(x)).join("")}</div>`;
   for (const g of pakiety) {
     const tu = xs.filter((x) => x.wPakiecie?.id === g.pk.id);
-    h += `<div class="karta lista-poz pakiet-grupa"><a class="pakiet-gl" href="#lista/pakiet:${esc(g.pk.id)}"><span><b>${esc(g.pk.nazwa)}</b><span>wspólny budżet: zapłacone ${zl(g.zapl)} z ${zl(g.plan)}</span></span><span class="poz-c"><span class="poz-v">${kw(g.zostalo)}</span><span class="poz-p">zostało</span></span></a>${tu.map((x) => wierszPozycji(x)).join("")}</div>`;
+    h += `<div class="karta lista-poz pakiet-grupa"><a class="pakiet-gl" href="#lista/pakiet:${esc(g.pk.id)}"><span><b>${esc(g.pk.nazwa)}</b><span>wspólny budżet: wydane ${zl(g.zapl)} z ${zl(g.plan)}</span></span><span class="poz-c"><span class="poz-v">${kw(g.zostalo)}</span><span class="poz-p">zostało</span></span></a>${tu.map((x) => wierszPozycji(x)).join("")}</div>`;
   }
   if (!xs.length) h += `<p class="pusto">Nie ma tu jeszcze pozycji. Dodaj pierwszą, np. „Lampy” albo „Malowanie”.</p>`;
   h += `<button class="btn-czarny szeroki" type="button" data-nowa-poz="${esc(id)}">${ikona("plus", 20)} Dodaj pozycję</button>`;
@@ -306,21 +306,21 @@ function ekranPoz(id) {
   let h = naglowek(esc(p.nazwa), wroc, `<button class="okr" type="button" data-edytuj-poz="${esc(id)}" aria-label="Edytuj pozycję">${ikona("olowek")}</button>`);
   h += `<section class="hero" style="--k:${p.zakup ? "#E4E4EA" : kolorPom(p.pom)}">
     <p class="hero-meta">${[p.zakup ? "Zakup domu" : nazwaPom(p.pom), nazwaKat(p.kat)].filter(Boolean).map(esc).join(" · ")}</p>
-    <div class="trio"><div><p class="hero-l">Zapłacone</p><p class="trio-v">${kw(x.zapl)}</p></div><div><p class="hero-l">Plan</p><p class="trio-v">${x.plan ? kw(x.plan) : "—"}</p></div><div><p class="hero-l">Zostało</p><p class="trio-v">${kw(x.zostalo)}</p></div></div>
+    <div class="trio"><div><p class="hero-l">Wydane</p><p class="trio-v">${kw(x.zapl)}</p></div><div><p class="hero-l">Plan</p><p class="trio-v">${x.plan ? kw(x.plan) : "—"}</p></div><div><p class="hero-l">Zostało</p><p class="trio-v">${kw(x.zostalo)}</p></div></div>
     ${pasek(x.zapl, x.zostalo, x.plan)}
     ${stanPozycji(x) ? `<p class="hero-tag">${stanPozycji(x)}</p>` : ""}
-    ${x.wPakiecie ? (() => { const g = S.pakiety.get(x.wPakiecie.id); return `<p class="hero-s">Pakiet „${esc(g.pk.nazwa)}”: zapłacone ${zl(g.zapl)} z ${zl(g.plan)}, zostało ${zl(g.zostalo)}.</p>`; })() : ""}
+    ${x.wPakiecie ? (() => { const g = S.pakiety.get(x.wPakiecie.id); return `<p class="hero-s">Pakiet „${esc(g.pk.nazwa)}”: wydane ${zl(g.zapl)} z ${zl(g.plan)}, zostało ${zl(g.zostalo)}.</p>`; })() : ""}
     ${p.notatka ? `<p class="hero-s">${esc(p.notatka)}</p>` : ""}
   </section>
   <button class="btn-czarny szeroki" type="button" data-nowa-pl="${esc(id)}">${ikona("plus", 20)} Dodaj płatność</button>`;
   h += `<div class="sekcja-h"><h2>Płatności${pl.length ? ` (${pl.length})` : ""}</h2></div>`;
-  h += pl.length ? `<div class="karta lista-p">${pl.map((q) => wierszPlatnosci(q, true)).join("")}</div>` : `<p class="pusto">Jeszcze nic nie zapłacono.</p>`;
+  h += pl.length ? `<div class="karta lista-p">${pl.map((q) => wierszPlatnosci(q, true)).join("")}</div>` : `<p class="pusto">Nic jeszcze nie wydano.</p>`;
   h += `<div class="sekcja-h"><h2>Produkty${pr.length ? ` (${pr.length})` : ""}</h2><button class="lnk" type="button" data-nowy-prod="${esc(id)}">Dodaj</button></div>`;
   if (pr.length) {
     h += `<div class="karta">${pr.map((q) => `<div class="prod">
         <button class="prod-g" type="button" data-prod="${esc(id)}|${esc(q.id)}"><span class="prod-n">${esc(q.nazwa)}</span><span class="prod-m">${esc([q.model, q.sklep].filter(Boolean).join(", "))}</span></button>
         <span class="prod-c">${kw(q.cenaGr)}</span>
-        <span class="prod-a">${q.link ? `<a class="chip" href="${esc(q.link)}" target="_blank" rel="noopener">Sklep ${ikona("strzalka", 16)}</a>` : ""}${kup.has(q.id) ? `<span class="tag ok">kupione</span>` : `<button class="chip chip-czarny" type="button" data-kup="${esc(id)}|${esc(q.id)}">Kupione</button>`}</span>
+        <span class="prod-a">${q.link ? `<a class="chip" href="${esc(q.link)}" target="_blank" rel="noopener">Sklep ${ikona("strzalka", 16)}</a>` : ""}${kup.has(q.id) ? `<span class="tag ok">kupione</span>` : `<button class="chip chip-czarny" type="button" data-kup="${esc(id)}|${esc(q.id)}">Kupiłem</button>`}</span>
       </div>`).join("")}<p class="przyp">Razem ${zl(sumaPr)}${x.plan ? (sumaPr > x.plan ? `, o ${zl(sumaPr - x.plan)} więcej niż plan` : sumaPr === x.plan ? ", tyle co plan" : `, ${zl(x.plan - sumaPr)} poniżej planu`) : ""}.</p></div>`;
   } else h += `<p class="pusto">Dodaj konkretne modele z cenami, żeby widzieć, czy mieszczą się w planie.</p>`;
   return h;
@@ -332,8 +332,8 @@ function ekranLista() {
   const f = S.fl;
   return `${naglowek("Wszystkie pozycje")}
   <label class="szukaj">${ikona("szukaj", 20)}<input id="fl-q" type="search" placeholder="Szukaj pozycji" value="${esc(f.q)}" autocomplete="off"></label>
-  <div class="chipy" role="group" aria-label="Stan">${STANY.map(([v, n]) => `<button class="chip ${f.stan === v ? "on" : ""}" type="button" data-fl-stan="${v}">${n}</button>`).join("")}</div>
-  <div class="chipy" role="group" aria-label="Pomieszczenie"><button class="chip ${!f.pom ? "on" : ""}" type="button" data-fl-pom="">Wszędzie</button>${pom().map((r) => `<button class="chip ${f.pom === r.id ? "on" : ""}" type="button" data-fl-pom="${esc(r.id)}"><span class="kropka" style="background:${kolorPom(r.id)}"></span>${esc(r.nazwa)}</button>`).join("")}</div>
+  <div class="chipy" role="group" aria-label="Stan">${STANY.map(([v, n]) => `<button class="chip ${f.stan === v ? "on" : ""}" type="button" aria-pressed="${f.stan === v}" data-fl-stan="${v}">${n}</button>`).join("")}</div>
+  <div class="chipy" role="group" aria-label="Pomieszczenie"><button class="chip ${!f.pom ? "on" : ""}" type="button" aria-pressed="${!f.pom}" data-fl-pom="">Wszędzie</button>${pom().map((r) => `<button class="chip ${f.pom === r.id ? "on" : ""}" type="button" aria-pressed="${f.pom === r.id}" data-fl-pom="${esc(r.id)}"><span class="kropka" style="background:${kolorPom(r.id)}"></span>${esc(r.nazwa)}</button>`).join("")}</div>
   <div id="wyniki"></div>`;
 }
 function wynikiListy() {
@@ -345,7 +345,7 @@ function wynikiListy() {
     (!q || [x.p.nazwa, x.p.notatka, nazwaPom(x.p.pom), nazwaKat(x.p.kat), ...(x.p.produkty || []).map((p) => p.nazwa + " " + p.model)].join(" ").toLowerCase().includes(q)));
   const s = suma(l.filter((x) => !x.p.zakup));
   if (!l.length) return `<p class="pusto">Nic tu nie pasuje. Zmień filtry albo wyszukiwanie.</p>`;
-  return `<p class="podsum">${pakF ? `Pakiet ${esc(nazwaPak(pakF))}: ` : ""}${l.length} poz., zapłacone ${zl(s.zapl)} z ${zl(s.plan)}</p><div class="karta lista-poz">${l.map((x) => wierszPozycji(x, true)).join("")}</div>`;
+  return `<p class="podsum">${pakF ? `Pakiet ${esc(nazwaPak(pakF))}: ` : ""}${l.length} poz., wydane ${zl(s.zapl)} z ${zl(s.plan)}</p><div class="karta lista-poz">${l.map((x) => wierszPozycji(x, true)).join("")}</div>`;
 }
 
 /* ---------- ekran: płatności ---------- */
@@ -353,7 +353,7 @@ function ekranPlatnosci() {
   const g = S.fp.gdzie;
   return `${naglowek("Płatności")}
   <button class="btn-czarny szeroki odstep" type="button" data-nowa-pl="">${ikona("plus", 20)} Dodaj płatność</button>
-  <div class="chipy" role="group" aria-label="Wykonawca lub sklep"><button class="chip ${!g ? "on" : ""}" type="button" data-fp-gdzie="">Wszyscy</button>${wykonawcy().map((w) => `<button class="chip ${g === w ? "on" : ""}" type="button" data-fp-gdzie="${esc(w)}">${esc(w)}</button>`).join("")}</div>
+  <div class="chipy" role="group" aria-label="Wykonawca lub sklep"><button class="chip ${!g ? "on" : ""}" type="button" aria-pressed="${!g}" data-fp-gdzie="">Wszyscy</button>${wykonawcy().map((w) => `<button class="chip ${g === w ? "on" : ""}" type="button" aria-pressed="${g === w}" data-fp-gdzie="${esc(w)}">${esc(w)}</button>`).join("")}</div>
   <div id="wyniki"></div>`;
 }
 function wynikiPlatnosci() {
@@ -363,7 +363,7 @@ function wynikiPlatnosci() {
   const razem = l.reduce((a, p) => a + (p.kwotaGr || 0), 0);
   const grupy = new Map();
   for (const pl of l) { const k = pl.data ? pl.data.slice(0, 7) : "brak"; if (!grupy.has(k)) grupy.set(k, []); grupy.get(k).push(pl); }
-  let h = `<section class="hero hero-plaski"><p class="hero-l">${g ? esc(g) : "Wykończenie razem"}</p><p class="hero-v">${kw(razem)}</p><p class="hero-s">${l.length} płatności, bez zakupu domu</p></section>`;
+  let h = `<section class="hero hero-plaski"><p class="hero-l">${g ? esc(g) : "Wydane na wykończenie"}</p><p class="hero-v">${kw(razem)}</p><p class="hero-s">${l.length} płatności, bez zakupu domu</p></section>`;
   for (const [k, ps] of grupy) {
     const t = k === "brak" ? "Przeniesione z arkusza" : `${MIES[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
     h += `<div class="sekcja-h"><h2>${t.charAt(0).toUpperCase() + t.slice(1)}</h2><span class="num szary">${zl(ps.reduce((a, p) => a + (p.kwotaGr || 0), 0))}</span></div><div class="karta lista-p">${ps.map((pl) => wierszPlatnosci(pl)).join("")}</div>`;
@@ -398,7 +398,9 @@ function ekranUstawienia() {
 
 /* ---------- arkusze (formularze od dołu) ---------- */
 function pokazArkusz(html, fokus) {
+  if (!S.przedArkuszem) S.przedArkuszem = document.activeElement;
   $("#arkusz").innerHTML = `<div class="uchwyt" aria-hidden="true"></div>${html}`;
+  const tytul = $("#arkusz h2"); if (tytul) { tytul.id = "ark-tytul"; $("#arkusz").setAttribute("aria-labelledby", "ark-tytul"); }
   $("#zaslona").hidden = false; document.body.classList.add("blok");
   if (!history.state?.ov) history.pushState({ ov: 1 }, "", location.href);
   if (fokus) setTimeout(() => $(fokus)?.focus(), 60);
@@ -407,6 +409,8 @@ function ukryjArkusz() {
   const e = S.sheet;
   if (e?.typ === "pl" && e.nowe?.length && !e.zapisano) for (const p of e.nowe) usunPlik(p);
   S.sheet = null; $("#zaslona").hidden = true; $("#arkusz").innerHTML = ""; document.body.classList.remove("blok");
+  const wroc = S.przedArkuszem; S.przedArkuszem = null;
+  if (wroc && document.contains(wroc)) wroc.focus({ preventScroll: true });
 }
 function zamknijArkusz() { ukryjArkusz(); if (history.state?.ov) { S.cichyPop = true; history.back(); } }
 const chipyWyboru = (nazwa, lista, wybrany, kolory) => `<div class="chipy" role="radiogroup">${lista.map((x) => `<button class="chip ${x.id === wybrany ? "on" : ""}" type="button" role="radio" aria-checked="${x.id === wybrany}" data-wybor="${nazwa}" data-v="${esc(x.id)}">${kolory ? `<span class="kropka" style="background:${kolorPom(x.id)}"></span>` : ""}${esc(x.nazwa)}</button>`).join("")}</div>`;
@@ -455,7 +459,7 @@ function arkuszPlatnosci(id, pozId, prod) {
   pokazArkusz(`<form id="f-pl" class="ark" novalidate>
     <h2>${pl ? "Płatność" : prod ? "Płatność za produkt" : "Nowa płatność"}</h2>
     <label class="pole-l" for="pl-kwota">Kwota</label><div class="kwota-w"><input class="pole kwota" id="pl-kwota" inputmode="decimal" placeholder="0" value="${kwota}" autocomplete="off"><span>zł</span></div>
-    <label class="pole-l" for="pl-poz">Za co</label><select class="pole" id="pl-poz">${opcjePozycji(wyb)}</select>
+    <label class="pole-l" for="pl-poz">Pozycja</label><select class="pole" id="pl-poz">${opcjePozycji(wyb)}</select>
     <label class="pole-l" for="pl-opis">Opis <span class="szary">(opcjonalnie)</span></label><input class="pole" id="pl-opis" placeholder="np. zaliczka, klej do płytek" value="${esc(pl?.opis ?? (prod ? [prod.nazwa, prod.model].filter(Boolean).join(" ") : ""))}" autocomplete="off">
     <label class="pole-l" for="pl-gdzie">Komu</label><input class="pole" id="pl-gdzie" list="dl-gdzie" placeholder="np. Kazik, Leroy Merlin" value="${esc(pl?.gdzie ?? prod?.sklep ?? "")}" autocomplete="off"><datalist id="dl-gdzie">${wykonawcy().map((g) => `<option value="${esc(g)}">`).join("")}</datalist>
     ${wykonawcy().length ? `<div class="chipy">${wykonawcy().slice(0, 6).map((g) => `<button class="chip" type="button" data-gdzie="${esc(g)}">${esc(g)}</button>`).join("")}</div>` : ""}
@@ -522,13 +526,13 @@ async function zapiszPlatnosc() {
     });
     e.zapisano = true;
     for (const p of usuniete) usunPlik(p);
-    toast(`Zapisano ${zl2(kwG)}: ${poz(pozId)?.nazwa || ""}`);
+    toast(`${e.id ? "Zapisano płatność" : "Dodano płatność"}: ${poz(pozId)?.nazwa || ""}, ${zl2(kwG)}`);
     zamknijArkusz();
   } catch (err) { bladZapisu(err); $("#pl-zapisz").disabled = false; }
 }
 async function usunPlatnosc() {
   const b = $("#pl-usun"), e = S.sheet, pl = platnosci().find((q) => q.id === e.id);
-  if (!b.dataset.pewne) { b.dataset.pewne = "1"; b.textContent = "Na pewno?"; return; }
+  if (!b.dataset.pewne) { b.dataset.pewne = "1"; b.textContent = "Tak, usuń"; return; }
   try {
     await zmien(`Usunięto płatność: ${poz(pl?.pozycja)?.nazwa || ""}, ${zl2(pl?.kwotaGr)}`, (d) => { d.platnosci = d.platnosci.filter((q) => q.id !== e.id); });
     for (const p of pl?.pliki || []) usunPlik(p.id);
@@ -563,8 +567,8 @@ async function zapiszEdycjePozycji() {
 }
 async function usunPozycje() {
   const id = S.sheet.id, b = $("#ep-usun"), n = platnosci().filter((q) => q.pozycja === id).length;
-  if (n) { const e = $("#ep-blad"); e.textContent = `Ta pozycja ma ${n} płatności. Najpierw je usuń albo przepnij.`; e.hidden = false; return; }
-  if (!b.dataset.pewne) { b.dataset.pewne = "1"; b.textContent = "Na pewno?"; return; }
+  if (n) { const e = $("#ep-blad"); e.textContent = `Ta pozycja ma ${n} płatności. Najpierw je usuń albo przenieś do innej pozycji.`; e.hidden = false; return; }
+  if (!b.dataset.pewne) { b.dataset.pewne = "1"; b.textContent = "Tak, usuń"; return; }
   const p = poz(id);
   try { await zmien(`Usunięto pozycję: ${p?.nazwa}`, (d) => { d.pozycje = d.pozycje.filter((q) => q.id !== id); }); zamknijArkusz(); location.hash = p?.zakup ? "#dom" : `#pom/${p?.pom}`; toast("Usunięto pozycję."); }
   catch (e) { bladZapisu(e); }
@@ -597,7 +601,7 @@ async function zapiszProdukt() {
 }
 async function usunProdukt() {
   const e = S.sheet, b = $("#pr-usun");
-  if (!b.dataset.pewne) { b.dataset.pewne = "1"; b.textContent = "Na pewno?"; return; }
+  if (!b.dataset.pewne) { b.dataset.pewne = "1"; b.textContent = "Tak, usuń"; return; }
   try { await zmien("Usunięto produkt", (d) => { const p = d.pozycje.find((q) => q.id === e.pozId); if (p) p.produkty = (p.produkty || []).filter((q) => q.id !== e.id); }); zamknijArkusz(); }
   catch (err) { bladZapisu(err); }
 }
@@ -638,7 +642,7 @@ function pobierzCsv(nazwa, rows) {
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 function csvPozycje() {
-  const rows = [["Pomieszczenie", "Pozycja", "Kategoria", "Plan", "Zapłacone", "Zostało", "Zakończona", "Zakup domu", "Pakiet", "Produkty", "Notatka"]];
+  const rows = [["Pomieszczenie", "Pozycja", "Kategoria", "Plan", "Wydane", "Zostało", "Zakończona", "Zakup domu", "Pakiet", "Produkty", "Notatka"]];
   for (const x of licz().values()) rows.push([nazwaPom(x.p.pom), x.p.nazwa, nazwaKat(x.p.kat), { gr: x.plan }, { gr: x.zapl }, { gr: x.zostalo }, x.p.zakonczona ? "tak" : "", x.p.zakup ? "tak" : "", nazwaPak(x.p.pakiet), (x.p.produkty || []).map((q) => `${q.nazwa} ${q.model || ""} ${f2.format(q.cenaGr / 100)} zł`.replace(/\s+/g, " ")).join(" | "), x.p.notatka]);
   pobierzCsv("koszty-pozycje", rows);
 }
@@ -662,7 +666,7 @@ function trasa() {
 function render() {
   const e = S.ekran = trasa();
   const el = $("#ekran");
-  for (const b of document.querySelectorAll("#nav [data-ekran]")) b.classList.toggle("on", b.dataset.ekran === (["pom", "poz"].includes(e.typ) ? "dom" : e.typ));
+  for (const b of document.querySelectorAll("#nav [data-ekran]")) { const on = b.dataset.ekran === (["pom", "poz"].includes(e.typ) ? "dom" : e.typ); b.classList.toggle("on", on); on ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"); }
   if (!S.gotowe) { el.innerHTML = `<div class="ladowanie">${S.blad ? esc(S.blad) : "Wczytywanie…"}</div>`; return; }
   licz();
   const klucz = e.typ + "/" + (e.id || "");
@@ -706,9 +710,9 @@ function wire() {
     if (t.closest("[data-budzet]")) { arkuszBudzetu(); return; }
     const wyb = t.closest("[data-wybor]"); if (wyb) { for (const b of document.querySelectorAll(`#arkusz [data-wybor="${wyb.dataset.wybor}"]`)) { const on = b === wyb && !(b.classList.contains("on") && wyb.dataset.wybor === "kat"); b.classList.toggle("on", on); b.setAttribute("aria-checked", on); } return; }
     const gd = t.closest("[data-gdzie]"); if (gd) { $("#pl-gdzie").value = gd.dataset.gdzie; return; }
-    const fs = t.closest("[data-fl-stan]"); if (fs) { S.fl.stan = fs.dataset.flStan; for (const b of document.querySelectorAll("[data-fl-stan]")) b.classList.toggle("on", b === fs); odswiezWyniki(); return; }
-    const fpm = t.closest("[data-fl-pom]"); if (fpm) { S.fl.pom = fpm.dataset.flPom; for (const b of document.querySelectorAll("[data-fl-pom]")) b.classList.toggle("on", b === fpm); odswiezWyniki(); return; }
-    const fg = t.closest("[data-fp-gdzie]"); if (fg) { S.fp.gdzie = fg.dataset.fpGdzie; for (const b of document.querySelectorAll("[data-fp-gdzie]")) b.classList.toggle("on", b === fg); odswiezWyniki(); return; }
+    const fs = t.closest("[data-fl-stan]"); if (fs) { S.fl.stan = fs.dataset.flStan; for (const b of document.querySelectorAll("[data-fl-stan]")) { b.classList.toggle("on", b === fs); b.setAttribute("aria-pressed", b === fs); } odswiezWyniki(); return; }
+    const fpm = t.closest("[data-fl-pom]"); if (fpm) { S.fl.pom = fpm.dataset.flPom; for (const b of document.querySelectorAll("[data-fl-pom]")) { b.classList.toggle("on", b === fpm); b.setAttribute("aria-pressed", b === fpm); } odswiezWyniki(); return; }
+    const fg = t.closest("[data-fp-gdzie]"); if (fg) { S.fp.gdzie = fg.dataset.fpGdzie; for (const b of document.querySelectorAll("[data-fp-gdzie]")) { b.classList.toggle("on", b === fg); b.setAttribute("aria-pressed", b === fg); } odswiezWyniki(); return; }
     const z = t.closest("[data-zoom]"); if (z && z.src) { const lb = document.createElement("div"); lb.className = "lightbox"; lb.innerHTML = `<img src="${z.src}" alt="">`; lb.addEventListener("click", () => lb.remove()); document.body.append(lb); return; }
     const pdf = t.closest("[data-pdf]"); if (pdf) { const okno = window.open("", "_blank"); blobUrl(pdf.dataset.pdf).then((u) => { if (okno) okno.location.href = u; else location.href = u; }, () => { okno?.close(); toast("Nie udało się otworzyć pliku."); }); return; }
     const rm = t.closest("[data-rm]"); if (rm && S.sheet?.typ === "pl") { S.sheet.pliki.splice(+rm.dataset.rm, 1); renderPliki(); return; }
@@ -751,6 +755,13 @@ function wire() {
     }
   });
   $("#zaslona").addEventListener("click", (e) => { if (e.target.id === "zaslona") zamknijArkusz(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || !S.sheet) return;
+    const f = [...$("#arkusz").querySelectorAll("button, input, select, textarea, a[href]")].filter((x) => !x.disabled && x.type !== "file" && x.offsetParent);
+    if (!f.length) return;
+    if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f.at(-1).focus(); }
+    else if (!e.shiftKey && (document.activeElement === f.at(-1) || !$("#arkusz").contains(document.activeElement))) { e.preventDefault(); f[0].focus(); }
+  });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") { const lb = $(".lightbox"); if (lb) lb.remove(); else if (S.sheet) zamknijArkusz(); } });
   document.addEventListener("visibilitychange", odswiez);
   setInterval(odswiez, 15000);

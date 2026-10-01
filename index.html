@@ -58,7 +58,7 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .dom-top > div { flex: 1; }
 .powitanie { margin: 0 0 4px; color: var(--tekst-2); font-weight: 500; }
 .okr { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--karta); display: grid; place-items: center; cursor: pointer; flex: none; }
-.okr.maly { width: 36px; height: 36px; background: var(--tlo); }
+.okr.maly { width: 44px; height: 44px; background: var(--tlo); }
 .okr.czarny { background: var(--czern); color: #fff; }
 .sync { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); margin-bottom: 10px; }
 .sync[data-s="err"] { background: var(--zle); }
@@ -74,6 +74,7 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .hero-tag { margin: 0; }
 .hero-r { position: relative; width: 76px; height: 76px; flex: none; display: grid; place-items: center; }
 .hero-r span { position: absolute; font: 800 19px/1 var(--f-disp); }
+.hero-r span.duzo { font-size: 15px; }
 .ring { width: 76px; height: 76px; }
 .ring-t { fill: none; stroke: rgba(255,255,255,.65); stroke-width: 8; }
 .ring-v { fill: none; stroke: var(--czern); stroke-width: 8; stroke-linecap: round; }
@@ -105,9 +106,9 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .alert b { font-size: 15px; }
 
 /* sekcje */
-.sekcja-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 28px 2px 12px; }
+.sekcja-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 28px 2px 12px; }
 .sekcja-h h2 { margin: 0; font: 700 21px/1.1 var(--f-disp); letter-spacing: -.015em; }
-.lnk { border: 0; background: none; padding: 6px 2px; font-weight: 700; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.lnk { display: inline-flex; align-items: center; min-height: 44px; border: 0; background: none; padding: 0 4px; font-weight: 700; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
 /* kafle pomieszczeń */
 .kafle { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -146,7 +147,7 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .kolko-v { fill: none; stroke: var(--czern); stroke-width: 4.5; stroke-linecap: round; }
 .kolko b { position: relative; font: 800 11.5px/1 var(--f-disp); }
 .kolko-zle { background: var(--uwaga); font: 800 20px/1 var(--f-disp); }
-.kolko b.zero { opacity: .5; }
+.kolko b.zero { color: rgba(0,0,0,.72); }
 .kolko-pelne { box-shadow: inset 0 0 0 3px var(--czern); }
 .kolko-pelne .ik { stroke-width: 2.2; width: 18px; height: 18px; }
 .pakiet-grupa { margin-top: 12px; }
@@ -166,12 +167,12 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 
 .tag { display: inline-flex; align-items: center; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: var(--tlo); color: var(--czern); white-space: nowrap; }
 .tag.ok { background: #D7F0E0; color: var(--ok); }
-.tag.zle { background: #FADAD6; color: var(--zle); }
+.tag.zle { background: #FADAD6; color: #A3241A; }
 .tag.uwaga { background: var(--uwaga); }
 
 .prod { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 14px 0; align-items: center; }
 .prod + .prod { border-top: 1px solid var(--linia); }
-.prod-g { border: 0; background: none; padding: 0; text-align: left; display: grid; gap: 2px; cursor: pointer; min-width: 0; }
+.prod-g { border: 0; background: none; padding: 0; text-align: left; display: grid; gap: 2px; cursor: pointer; min-width: 0; min-height: 44px; align-content: center; }
 .prod-n { font-weight: 700; overflow-wrap: anywhere; }
 .prod-m { font-size: 13px; color: var(--tekst-2); }
 .prod-c { font: 700 17px/1 var(--f-disp); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -187,14 +188,14 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .chipy { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 16px 4px; margin: 0 -16px 10px; }
 .chipy::-webkit-scrollbar { display: none; }
 .ark .chipy { margin: 0 -20px 4px; padding: 2px 20px 4px; }
-.chip { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 0 16px; border-radius: 99px; border: 0; background: var(--karta); font-weight: 600; font-size: 14px; white-space: nowrap; cursor: pointer; }
+.chip { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 16px; border-radius: 99px; border: 0; background: var(--karta); font-weight: 600; font-size: 14px; white-space: nowrap; cursor: pointer; }
 .ark .chip { background: var(--tlo); }
 .chip.on { background: var(--czern); color: #fff; }
 .chip-czarny { background: var(--czern); color: #fff; }
-.chip-zle { background: #FADAD6; color: var(--zle); }
+.chip-zle { background: #FADAD6; color: #A3241A; }
 
 .szukaj { display: flex; align-items: center; gap: 10px; background: var(--karta); border-radius: 99px; padding: 0 18px; min-height: 50px; margin-bottom: 12px; color: var(--tekst-2); }
-.szukaj input { flex: 1; min-width: 0; border: 0; background: none; outline: none; color: var(--czern); font-size: 16px; }
+.szukaj input { flex: 1; min-width: 0; min-height: 44px; border: 0; background: none; outline: none; color: var(--czern); font-size: 16px; }
 .podsum { margin: 4px 2px 10px; font-size: 13.5px; color: var(--tekst-2); font-weight: 600; }
 .pusto { margin: 0; padding: 18px; text-align: center; color: var(--tekst-2); background: var(--karta); border-radius: var(--r-sredni); }
 .dodaj-wiersz { width: 100%; margin-top: 12px; min-height: 60px; border-radius: var(--r-sredni); border: 2px dashed rgba(0,0,0,.25); background: none; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700; cursor: pointer; }
@@ -206,7 +207,7 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .ust .przyp { padding: 0 4px; }
 .ust-w { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ust-w .pole { flex: 1; min-width: 0; }
-.kolor { width: 36px; height: 36px; border-radius: 50%; border: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); cursor: pointer; flex: none; }
+.kolor { width: 44px; height: 44px; border-radius: 50%; border: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); cursor: pointer; flex: none; }
 .ask { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; padding: 10px 12px; border-radius: var(--r-maly); background: var(--tlo); }
 
 /* pola formularzy */
@@ -268,6 +269,6 @@ textarea.pole { resize: vertical; }
 
 <div id="zaslona" hidden><div id="arkusz" role="dialog" aria-modal="true"></div></div>
 <div id="toast" role="status" hidden></div>
-<script src="app.js?v=7"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
