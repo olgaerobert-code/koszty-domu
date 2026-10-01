@@ -1,5 +1,11 @@
 (() => {
-const REPO_DANE = { owner: "olgaerobert-code", repo: "koszty-domu-dane", plik: "dane.json", branch: "main" };
+/* Baza: ten sam projekt Supabase co aplikacja treningowa. Klucz publikowalny jest jawny
+   z założenia; tabele są zamknięte, a funkcje wymagają kodu domu (supabase.sql).
+   Kod jest wspólny i wpisany tutaj, więc każde urządzenie działa od razu.
+   Świadomy wybór Roberta: kto zajrzy w źródło, może czytać i pisać. */
+const SB_URL = "https://jvbdodnoxzowviqwhzfr.supabase.co";
+const SB_KEY = "sb_publishable_RYMFMP8_vAaRy6vfgUFhjQ_qqhkOdr8";
+const KOD_DOMU = "DOM-QEBE-TX5R-NX2H";
 const PUSTE = { wersja: 2, ustawienia: { pomieszczenia: [{ id: "caly-dom", nazwa: "Cały dom" }], kategorie: [{ id: "inne", nazwa: "Inne" }] }, pozycje: [], platnosci: [] };
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -29,25 +35,19 @@ function parseKwota(s) {
   return Number.isFinite(n) ? Math.round(n * 100) : null;
 }
 
-/* ---------- GitHub jako baza ---------- */
-const TOKEN_KEY = "kd-gh-token";
-const czytajToken = () => { try { return localStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; } };
-const zapiszToken = (t) => { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch {} };
+/* ---------- Supabase jako baza ---------- */
 const b64enc = (bytes) => { let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); };
 const b64dec = (s) => Uint8Array.from(atob(s.replace(/\s/g, "")), (c) => c.charCodeAt(0));
-const sciezka = (p) => `/repos/${REPO_DANE.owner}/${REPO_DANE.repo}/contents/${p.split("/").map(encodeURIComponent).join("/")}`;
 
-async function gh(path, opts = {}) {
+async function rpc(fn, body) {
   let r;
   try {
-    r = await fetch("https://api.github.com" + path, { ...opts, cache: "no-store", headers: { Authorization: "Bearer " + S.token, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(opts.headers || {}) } });
+    r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, { method: "POST", headers: { apikey: SB_KEY, Authorization: "Bearer " + SB_KEY, "Content-Type": "application/json" }, body: JSON.stringify({ p_key: KOD_DOMU, ...body }) });
   } catch { throw { code: "siec" }; }
-  if (r.status === 401) throw { code: "token", status: 401 };
-  if (r.status === 403 || r.status === 429) {
-    if (r.headers.get("x-ratelimit-remaining") === "0") throw { code: "limit", status: r.status };
-    throw { code: "dostep", status: r.status };
-  }
-  return r;
+  if (r.status === 404) throw { code: "brak-bazy", status: 404 };
+  if (!r.ok) throw { code: "inny", status: r.status };
+  const t = await r.text();
+  return t ? JSON.parse(t) : null;
 }
 function normalizuj(d) {
   d.ustawienia ??= klon(PUSTE.ustawienia);
@@ -56,26 +56,15 @@ function normalizuj(d) {
   return d;
 }
 async function pobierz() {
-  const r = await gh(sciezka(REPO_DANE.plik) + "?ref=" + REPO_DANE.branch);
-  if (r.status === 404) {
-    const repo = await gh(`/repos/${REPO_DANE.owner}/${REPO_DANE.repo}`);
-    if (!repo.ok) throw { code: "dostep", status: 404 };
-    return { sha: null, dane: klon(PUSTE) };
-  }
-  if (!r.ok) throw { code: "inny", status: r.status };
-  const j = await r.json();
-  let tekst;
-  if (j.encoding === "base64" && j.content) tekst = new TextDecoder().decode(b64dec(j.content));
-  else {
-    const b = await gh(`/repos/${REPO_DANE.owner}/${REPO_DANE.repo}/git/blobs/${j.sha}`, { headers: { Accept: "application/vnd.github.raw+json" } });
-    tekst = await b.text();
-  }
-  return { sha: j.sha, dane: normalizuj(JSON.parse(tekst)) };
+  const rows = await rpc("koszty_pull", {});
+  if (!rows?.length) return { wersja: 0, dane: klon(PUSTE) };
+  return { wersja: Number(rows[0].wersja), dane: normalizuj(rows[0].dane) };
 }
 let kolejka = Promise.resolve();
 function wKolejce(fn) { const p = kolejka.then(fn); kolejka = p.catch(() => {}); return p; }
 let zajete = 0;
-/* zmien(opis, fn): fn zmienia kopię danych; zapis = jeden commit; przy konflikcie dane są pobierane ponownie i zmiana nakładana jeszcze raz */
+/* zmien(opis, fn): fn zmienia kopię danych; baza przyjmuje zapis tylko na aktualnej wersji,
+   a przy konflikcie dane są pobierane ponownie i zmiana nakładana jeszcze raz */
 function zmien(opis, fn) {
   return wKolejce(async () => {
     zajete++; sync("saving", "Zapisywanie…");
@@ -83,44 +72,32 @@ function zmien(opis, fn) {
       for (let proba = 0; proba < 4; proba++) {
         const draft = klon(S.dane);
         fn(draft);
-        const body = { message: opis, branch: REPO_DANE.branch, content: b64enc(new TextEncoder().encode(JSON.stringify(draft, null, 1))) };
-        if (S.sha) body.sha = S.sha;
-        const r = await gh(sciezka(REPO_DANE.plik), { method: "PUT", body: JSON.stringify(body) });
-        if (r.ok) { const j = await r.json(); S.sha = j.content.sha; ustawDane(draft); sync("ok", "Zapisano"); return; }
-        if (r.status === 409 || r.status === 422) { const p = await pobierz(); S.sha = p.sha; ustawDane(p.dane); continue; }
-        throw { code: "inny", status: r.status };
+        const w = Number(await rpc("koszty_push", { p_dane: draft, p_wersja: S.wersja, p_opis: opis }));
+        if (w > 0) { S.wersja = w; ustawDane(draft); sync("ok", "Zapisano"); return; }
+        const p = await pobierz(); S.wersja = p.wersja; ustawDane(p.dane);
       }
       throw { code: "konflikt" };
     } finally { zajete--; }
   });
 }
-function wgrajPlikGH(path, bytes, opis) {
-  return wKolejce(async () => {
-    const r = await gh(sciezka(path), { method: "PUT", body: JSON.stringify({ message: opis, branch: REPO_DANE.branch, content: b64enc(bytes) }) });
-    if (!r.ok) throw { code: "inny", status: r.status };
-  });
+function wgrajPlik(id, bytes, typ) {
+  return wKolejce(() => rpc("koszty_plik_push", { p_id: id, p_typ: typ, p_dane: b64enc(bytes) }));
 }
-function usunPlikGH(path) {
-  return wKolejce(async () => {
-    const m = await gh(sciezka(path) + "?ref=" + REPO_DANE.branch);
-    if (m.status === 404) return;
-    if (!m.ok) throw { code: "inny", status: m.status };
-    const { sha } = await m.json();
-    await gh(sciezka(path), { method: "DELETE", body: JSON.stringify({ message: "Usunięto załącznik " + path, sha, branch: REPO_DANE.branch }) });
-  }).catch(() => {});
+function usunPlik(id) {
+  return wKolejce(() => rpc("koszty_plik_usun", { p_id: id })).catch(() => {});
 }
 const bloby = new Map();
-function blobUrl(path) {
-  if (!bloby.has(path)) bloby.set(path, gh(sciezka(path) + "?ref=" + REPO_DANE.branch, { headers: { Accept: "application/vnd.github.raw+json" } })
-    .then((r) => { if (!r.ok) throw 0; return r.blob(); }).then((b) => URL.createObjectURL(b)).catch((e) => { bloby.delete(path); throw e; }));
-  return bloby.get(path);
+function blobUrl(id) {
+  if (!bloby.has(id)) bloby.set(id, rpc("koszty_plik_pull", { p_id: id }).then((rows) => {
+    if (!rows?.length) throw 0;
+    return URL.createObjectURL(new Blob([b64dec(rows[0].dane)], { type: rows[0].typ }));
+  }).catch((e) => { bloby.delete(id); throw e; }));
+  return bloby.get(id);
 }
 
 /* ---------- stan ---------- */
 const S = {
-  qr: false,
-  token: czytajToken(), zalogowany: false, logowanie: false, cichy: false, bladLogowania: "",
-  dane: null, sha: null, gotowe: false, calc: null,
+  dane: null, wersja: 0, gotowe: false, blad: "", calc: null,
   view: "podsumowanie",
   fp: { q: "", pom: "", kat: "", stan: "" },
   fl: { q: "", pom: "", gdzie: "" },
@@ -165,10 +142,9 @@ function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = fal
 function sync(s, txt) { const e = $("#sync"); e.dataset.s = s; e.textContent = txt; }
 function bladZapisu(e) {
   const c = e?.code;
-  if (c === "token") { wyloguj("Token wygasł albo został cofnięty. Wklej nowy."); return; }
-  if (c === "limit") { sync("err", "Limit GitHuba"); toast("GitHub chwilowo ogranicza zapytania. Spróbuj za kilka minut."); return; }
-  if (c === "dostep") { sync("err", "Brak uprawnień"); toast("Token nie ma prawa zapisu do repozytorium z danymi (Contents: Read and write)."); return; }
   if (c === "siec") { sync("err", "Brak internetu"); toast("Brak połączenia z internetem. Nic nie zostało zapisane."); return; }
+  if (c === "brak-bazy") { sync("err", "Baza nieprzygotowana"); toast("Baza nie jest przygotowana. Trzeba uruchomić supabase.sql w Supabase."); return; }
+  if (c === "konflikt") { sync("err", "Nie zapisano"); toast("Ktoś zapisywał w tym samym czasie. Spróbuj jeszcze raz."); return; }
   sync("err", "Nie zapisano"); toast("Nie udało się zapisać. Spróbuj ponownie.");
 }
 
@@ -380,7 +356,6 @@ function renderUstawienia(force) {
       <input class="ctl" type="text" value="${esc(x.nazwa)}" data-u="${typ}" data-id="${esc(x.id)}" aria-label="Nazwa">
       <button class="btn link" type="button" data-u-del="${typ}" data-id="${esc(x.id)}">usuń <span class="cnt">(${ile(typ, x.id)})</span></button>
       ${ask(typ, x.id)}</div>`).join("")}</div>`;
-  const repoUrl = `https://github.com/${REPO_DANE.owner}/${REPO_DANE.repo}`;
   el.innerHTML = `
   <div class="grid2">
     <div class="panel stack"><div><h2>Pomieszczenia</h2><p class="hint" style="margin:0">Budżet pomieszczenia to suma planów jego pozycji. Rzeczy na cały dom (podłogi, drzwi, elektryka) trzymaj w „Cały dom”.</p></div>
@@ -391,13 +366,9 @@ function renderUstawienia(force) {
       <form class="srow k" id="u-add-kat"><input class="ctl" type="text" placeholder="Nowa kategoria" aria-label="Nowa kategoria"><button class="btn" type="submit">Dodaj</button></form></div>
   </div>
   <div class="panel stack">
-    <div><h2>Telefon i inne urządzenia</h2><p class="hint" style="margin:0">Zeskanuj kod aparatem telefonu, a aplikacja otworzy się od razu zalogowana. Kod zawiera klucz do Twoich danych, więc pokazuj go tylko domownikom.</p></div>
-    ${S.qr ? `<div class="qr-box"><div id="qr"></div><div class="stack"><button class="btn" type="button" id="u-kopiuj">Kopiuj link</button><button class="btn link" type="button" id="u-qr-ukryj">Ukryj kod</button></div></div>` : `<div><button class="btn pri" type="button" id="u-qr">Pokaż kod QR</button></div>`}
-  </div>
-  <div class="panel stack">
-    <div><h2>Kopia i historia</h2><p class="hint" style="margin:0">Każdy zapis to osobna wersja w prywatnym repozytorium <a href="${repoUrl}/commits/${REPO_DANE.branch}" target="_blank" rel="noopener">${REPO_DANE.repo}</a>, więc każdą zmianę da się podejrzeć i cofnąć. Pliki CSV otworzysz w Excelu i Google Sheets.</p></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="u-csv-poz">CSV: pozycje</button><button class="btn" type="button" id="u-csv-pl">CSV: płatności</button><button class="btn" type="button" id="u-logout">Wyloguj to urządzenie</button></div>
-  </div>`;  if (S.qr) rysujQr();
+    <div><h2>Kopia i historia</h2><p class="hint" style="margin:0">Baza trzyma kopię 300 ostatnich wersji danych, więc pomyłkę da się cofnąć (poproś Claude’a). Pliki CSV otworzysz w Excelu i Google Sheets. Aplikacja działa od razu na każdym urządzeniu, wystarczy otworzyć adres strony.</p></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="u-csv-poz">CSV: pozycje</button><button class="btn" type="button" id="u-csv-pl">CSV: płatności</button></div>
+  </div>`;
 }
 function pobierzCsv(nazwa, rows) {
   const q = (v) => { v = String(v ?? ""); return /[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
@@ -517,16 +488,16 @@ async function wgraj(files) {
   for (const f of files) {
     try {
       const { bytes, type, ext } = await przygotujPlik(f);
-      if (bytes.length > 20 * 1024 * 1024) throw { code: "duzy" };
-      const path = `paragony/${dzis().slice(0, 7)}/${losoweId()}.${ext}`;
-      await wgrajPlikGH(path, bytes, `Załącznik: ${f.name}`);
+      if (bytes.length > 10 * 1024 * 1024) throw { code: "duzy" };
+      const path = `${dzis().slice(0, 7)}-${losoweId()}.${ext}`;
+      await wgrajPlik(path, bytes, type);
       bloby.set(path, Promise.resolve(URL.createObjectURL(new Blob([bytes], { type }))));
-      if (S.sheet !== e) { usunPlikGH(path); return; }
+      if (S.sheet !== e) { usunPlik(path); return; }
       e.pliki.push({ id: path, typ: type, nazwa: f.name }); e.nowe.push(path);
     } catch (err) {
       const c = err?.code;
       if (c === "token") { bladZapisu(err); break; }
-      toast(c === "format" ? `Plik ${f.name} ma nieobsługiwany format. Użyj zdjęcia (JPG, PNG) albo PDF.` : c === "duzy" ? `Plik ${f.name} jest za duży (limit 20 MB).` : `Nie udało się wgrać ${f.name}.`);
+      toast(c === "format" ? `Plik ${f.name} ma nieobsługiwany format. Użyj zdjęcia (JPG, PNG) albo PDF.` : c === "duzy" ? `Plik ${f.name} jest za duży (limit 10 MB).` : `Nie udało się wgrać ${f.name}.`);
     }
   }
   e.wgrywa = false; renderPliki();
@@ -548,7 +519,7 @@ async function zapiszPl(kolejna) {
       if (i >= 0) d.platnosci[i] = doc; else d.platnosci.push(doc);
     });
     S.ostatniaPoz = pozId;
-    for (const p of usuniete) usunPlikGH(p);
+    for (const p of usuniete) usunPlik(p);
     e.nowe = [];
     toast(`Zapisano: ${nazwa}, ${zl2(kw)}`);
     if (kolejna) { otworzPl(null, pozId, e.powrot); $("#pl-data").value = doc.data; $("#pl-gdzie").value = doc.gdzie; }
@@ -561,7 +532,7 @@ async function usunPl() {
   if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Na pewno usunąć?"; return; }
   try {
     await zmien(`Usunięto płatność: ${poz(pl?.pozycja)?.nazwa || ""}, ${zl2(pl?.kwotaGr)}`, (d) => { d.platnosci = d.platnosci.filter((q) => q.id !== e.id); });
-    for (const p of pl?.pliki || []) usunPlikGH(p.id);
+    for (const p of pl?.pliki || []) usunPlik(p.id);
     toast("Usunięto płatność.");
     if (e.powrot) otworzPoz(e.powrot); else zamknij();
   } catch (err) { bladZapisu(err); }
@@ -575,74 +546,33 @@ function pokazSheet(fokus) {
 }
 function zamknij(anulowano) {
   const e = S.sheet;
-  if (anulowano && e?.typ === "pl" && e.nowe?.length) for (const p of e.nowe) usunPlikGH(p);
+  if (anulowano && e?.typ === "pl" && e.nowe?.length) for (const p of e.nowe) usunPlik(p);
   if (anulowano && e?.typ === "pl" && e.powrot) { otworzPoz(e.powrot); return; }
   S.sheet = null; $("#veil").hidden = true; document.body.style.overflow = "";
 }
 
-const linkUrzadzenia = () => `${location.origin}${location.pathname}#klucz=${S.token}`;
-function rysujQr() {
-  const rysuj = () => { const el = $("#qr"); if (!el) return; el.innerHTML = ""; new window.QRCode(el, { text: linkUrzadzenia(), width: 220, height: 220, colorDark: "#1b211f", colorLight: "#ffffff", correctLevel: window.QRCode.CorrectLevel.M }); };
-  if (window.QRCode) return rysuj();
-  const sc = document.createElement("script");
-  sc.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
-  sc.onload = rysuj; sc.onerror = () => toast("Nie udało się wczytać generatora kodu QR. Użyj „Kopiuj link”.");
-  document.head.append(sc);
-}
-
-/* ---------- logowanie ---------- */
-function renderLogin() {
-  const el = $("#v-login");
-  if (S.logowanie && S.cichy) { el.innerHTML = `<div class="banner">Łączenie z GitHubem…</div>`; return; }
-  el.innerHTML = `<div class="panel stack login">
-    <div><h2>Połącz z GitHubem</h2><p style="margin:0"><strong>Aplikacja działa już na innym urządzeniu?</strong> Otwórz tam zakładkę „Ustawienia” → „Pokaż kod QR” i zeskanuj kod tym telefonem. Nic nie wklejasz.</p></div>
-    <p style="margin:0">Pierwsze uruchomienie (raz, najlepiej na komputerze): dane leżą w Twoim prywatnym repozytorium <strong>${REPO_DANE.repo}</strong>, a aplikacja potrzebuje do nich klucza.</p>
-    <ol class="steps">
-      <li>Otwórz <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a> (zalogowany jako ${REPO_DANE.owner}).</li>
-      <li><b>Token name:</b> koszty-domu + nazwa urządzenia, np. „koszty-domu telefon”.</li>
-      <li><b>Expiration:</b> wybierz najdłuższy termin (Custom, rok do przodu).</li>
-      <li><b>Repository access:</b> Only select repositories → <b>${REPO_DANE.repo}</b>.</li>
-      <li><b>Permissions → Repository permissions → Contents:</b> Read and write.</li>
-      <li>Kliknij <b>Generate token</b>, skopiuj go i wklej poniżej.</li>
-    </ol>
-    <form id="login-form" class="stack">
-      <div class="fg"><label for="login-token">Token (zaczyna się od github_pat_)</label><input class="ctl num" id="login-token" autocomplete="off" spellcheck="false" placeholder="github_pat_…"></div>
-      ${S.bladLogowania ? `<div class="err">${esc(S.bladLogowania)}</div>` : ""}
-      <div><button class="btn pri" type="submit" ${S.logowanie ? "disabled" : ""}>${S.logowanie ? "Sprawdzanie…" : "Połącz"}</button></div>
-    </form>
-    <p class="hint" style="margin:0">Token daje dostęp tylko do repozytorium z danymi. Jeśli zgubisz telefon, usuń jego token na GitHubie w Settings → Developer settings → Personal access tokens.</p>
-  </div>`;
-}
-async function zaloguj(token) {
-  S.token = token.trim(); S.logowanie = true; S.bladLogowania = ""; render();
+/* ---------- wczytanie i odświeżanie ---------- */
+async function wczytaj() {
   try {
     const p = await pobierz();
-    S.sha = p.sha; S.zalogowany = true; zapiszToken(S.token); ustawDane(p.dane);
-    sync("ok", "Połączono z GitHubem");
+    S.wersja = p.wersja; S.blad = ""; ustawDane(p.dane); sync("ok", "Połączono");
   } catch (e) {
-    S.zalogowany = false;
-    S.bladLogowania = e?.code === "token" ? "GitHub nie przyjął tego tokenu. Sprawdź, czy skopiowałeś go w całości." : e?.code === "dostep" ? `Token nie ma dostępu do repozytorium ${REPO_DANE.repo}. Zaznacz je w „Repository access” i daj Contents: Read and write.` : e?.code === "siec" ? "Brak połączenia z internetem." : "Nie udało się połączyć. Spróbuj ponownie.";
-    if (e?.code !== "siec") zapiszToken("");
-    sync("off", "Niepołączone");
+    S.blad = e?.code === "brak-bazy" ? "Baza nie jest jeszcze przygotowana. W Supabase trzeba raz uruchomić skrypt supabase.sql." : e?.code === "siec" ? "Brak połączenia z internetem. Spróbuję ponownie za chwilę." : "Nie udało się wczytać danych. Spróbuję ponownie za chwilę.";
+    sync("err", "Brak połączenia"); render();
   }
-  S.logowanie = false; S.cichy = false; render();
-}
-function wyloguj(msg) {
-  zapiszToken(""); S.token = ""; S.zalogowany = false; S.bladLogowania = msg || ""; S.dane = null; S.gotowe = false; S.calc = null;
-  if (S.sheet) { S.sheet = null; $("#veil").hidden = true; document.body.style.overflow = ""; }
-  sync("off", "Niepołączone"); render();
 }
 async function odswiez() {
-  if (!S.zalogowany || zajete || S.sheet || document.visibilityState !== "visible") return;
-  try { const p = await pobierz(); if (p.sha !== S.sha && !zajete && !S.sheet) { S.sha = p.sha; ustawDane(p.dane); } sync("ok", "Aktualne"); }
-  catch (e) { if (e?.code === "token") wyloguj("Token wygasł albo został cofnięty. Wklej nowy."); else if (e?.code === "siec") sync("err", "Brak internetu"); }
+  if (zajete || S.sheet || document.visibilityState !== "visible") return;
+  if (!S.gotowe) return wczytaj();
+  try { const p = await pobierz(); if (p.wersja !== S.wersja && !zajete && !S.sheet) { S.wersja = p.wersja; ustawDane(p.dane); } sync("ok", "Aktualne"); }
+  catch (e) { sync("err", e?.code === "siec" ? "Brak internetu" : "Brak połączenia"); }
 }
 
 /* ---------- render ---------- */
 function render() {
-  const zal = S.zalogowany;
-  $("#v-login").hidden = zal; $("nav.tabs").hidden = !zal;
-  if (!zal) { for (const v of WIDOKI) $("#v-" + v).hidden = true; $("#fab").hidden = true; renderLogin(); return; }
+  const el = $("#v-login");
+  el.hidden = !S.blad || S.gotowe;
+  if (!el.hidden) el.innerHTML = `<div class="banner">${esc(S.blad)}</div>`;
   for (const v of WIDOKI) { $("#v-" + v).hidden = S.view !== v; $("#t-" + v).setAttribute("aria-selected", S.view === v); }
   $("#fab").hidden = !S.gotowe || !pozycje().length;
   if (S.view === "podsumowanie") renderPodsumowanie();
@@ -693,15 +623,11 @@ function wire() {
     if (t.closest("[data-del-ok]")) { usunSlownik(); return; }
     if (t.id === "u-csv-poz") { csvPozycje(); return; }
     if (t.id === "u-csv-pl") { csvPlatnosci(); return; }
-    if (t.id === "u-logout") { wyloguj(); return; }
-    if (t.id === "u-qr") { S.qr = true; renderUstawienia(true); rysujQr(); return; }
-    if (t.id === "u-qr-ukryj") { S.qr = false; renderUstawienia(true); return; }
-    if (t.id === "u-kopiuj") { navigator.clipboard?.writeText(linkUrzadzenia()).then(() => toast("Skopiowano link. Otwórz go na drugim urządzeniu."), () => toast("Nie udało się skopiować.")); return; }
   });
   document.addEventListener("change", (ev) => {
     const t = ev.target;
     if (t.id === "pl-file") { const fs = [...t.files]; t.value = ""; if (fs.length) wgraj(fs); return; }
-    const u = t.dataset.u; if (!u || !S.zalogowany) return;
+    const u = t.dataset.u; if (!u || !S.gotowe) return;
     const id = t.dataset.id, lista = u === "pom" ? pom() : kat();
     const x = lista.find((y) => y.id === id), v = t.value.trim();
     if (!x || !v || v === x.nazwa) { t.value = x?.nazwa || ""; return; }
@@ -711,7 +637,6 @@ function wire() {
   document.addEventListener("submit", (ev) => {
     const f = ev.target;
     ev.preventDefault();
-    if (f.id === "login-form") { const v = $("#login-token").value.trim(); if (v) zaloguj(v); return; }
     if (f.id === "form-poz") { zapiszPoz(); return; }
     if (f.id === "form-pl") { zapiszPl(false); return; }
     if (f.id === "u-add-pom" || f.id === "u-add-kat") {
@@ -738,7 +663,7 @@ function wire() {
   });
   window.addEventListener("hashchange", () => { const v = location.hash.slice(1); if (WIDOKI.includes(v) && v !== S.view) idz(v); });
   document.addEventListener("visibilitychange", odswiez);
-  setInterval(odswiez, 60000);
+  setInterval(odswiez, 15000);
 }
 async function usunSlownik() {
   const { typ, id } = S.usuwanie;
@@ -757,8 +682,7 @@ async function usunSlownik() {
 /* ---------- start ---------- */
 try { const v = localStorage.getItem("kd-view"); if (WIDOKI.includes(v)) S.view = v; } catch {}
 const h = location.hash.slice(1); if (WIDOKI.includes(h)) S.view = h;
-const zLinku = h.match(/^klucz=([A-Za-z0-9_]+)$/);
-if (zLinku) { S.token = zLinku[1]; history.replaceState(null, "", location.pathname + location.search); }
-wire(); render();
-if (S.token) { S.cichy = true; zaloguj(S.token); } else sync("off", "Niepołączone");
+try { localStorage.removeItem("kd-gh-token"); } catch {}
+if (/^klucz=/.test(h)) history.replaceState(null, "", location.pathname + location.search);
+wire(); render(); wczytaj();
 })();
