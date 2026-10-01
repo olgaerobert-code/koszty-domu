@@ -51,7 +51,7 @@ async function rpc(fn, body) {
 }
 function normalizuj(d) {
   d.ustawienia ??= klon(PUSTE.ustawienia);
-  d.ustawienia.pomieszczenia ??= []; d.ustawienia.kategorie ??= [];
+  d.ustawienia.pomieszczenia ??= []; d.ustawienia.kategorie ??= []; d.ustawienia.pakiety ??= [];
   d.pozycje ??= []; d.platnosci ??= [];
   return d;
 }
@@ -99,7 +99,7 @@ function blobUrl(id) {
 const S = {
   dane: null, wersja: 0, gotowe: false, blad: "", calc: null,
   view: "podsumowanie",
-  fp: { q: "", pom: "", kat: "", stan: "" },
+  fp: { q: "", pom: "", kat: "", stan: "", pak: "" },
   fl: { q: "", pom: "", gdzie: "" },
   sheet: null, usuwanie: null,
 };
@@ -107,6 +107,11 @@ const WIDOKI = ["podsumowanie", "pozycje", "platnosci", "ustawienia"];
 function ustawDane(d) { S.dane = d; S.gotowe = true; S.calc = null; render(); }
 const pom = () => S.dane?.ustawienia.pomieszczenia || [];
 const kat = () => S.dane?.ustawienia.kategorie || [];
+const pak = () => S.dane?.ustawienia.pakiety || [];
+const nazwaPak = (id) => pak().find((p) => p.id === id)?.nazwa || "";
+/* słowniki: pomieszczenia, kategorie i pakiety; pole = nazwa pola w pozycji */
+const SLOWNIK = { pom: { klucz: "pomieszczenia", pole: "pom", nazwa: "pomieszczenie" }, kat: { klucz: "kategorie", pole: "kat", nazwa: "kategorię" }, pak: { klucz: "pakiety", pole: "pakiet", nazwa: "pakiet" } };
+const slownik = (typ) => S.dane?.ustawienia[SLOWNIK[typ].klucz] || [];
 const pozycje = () => S.dane?.pozycje || [];
 const platnosci = () => S.dane?.platnosci || [];
 const nazwaPom = (id) => pom().find((p) => p.id === id)?.nazwa || "Bez pomieszczenia";
@@ -124,6 +129,21 @@ function licz() {
     x.zostalo = x.p.zakonczona ? 0 : Math.max(x.plan - x.zapl, 0);
     x.ponad = x.plan > 0 && x.zapl > x.plan;
     x.bezPlanu = !x.plan;
+  }
+  /* Pakiet (np. Kazik: robocizna + materiały) liczy budżet wspólnie: zostało = suma planów − suma wpłat
+     (nie więcej niż suma tego, co zostało w pozycjach). Kwota jest rozkładana na pozycje proporcjonalnie,
+     żeby sumy pomieszczeń i kategorii się zgadzały. Pojedyncza pozycja w pakiecie nie jest „ponad planem”. */
+  S.pakiety = new Map();
+  for (const pk of pak()) {
+    const xs = [...m.values()].filter((x) => x.p.pakiet === pk.id);
+    if (!xs.length) continue;
+    const plan = xs.reduce((a, x) => a + x.plan, 0), zapl = xs.reduce((a, x) => a + x.zapl, 0), ind = xs.reduce((a, x) => a + x.zostalo, 0);
+    const zostalo = Math.min(Math.max(plan - zapl, 0), ind);
+    let reszta = zostalo;
+    const otwarte = xs.filter((x) => x.zostalo > 0).sort((a, b) => b.zostalo - a.zostalo);
+    otwarte.forEach((x, i) => { const v = i === otwarte.length - 1 ? reszta : Math.round((x.zostalo * zostalo) / ind); x.zostalo = v; reszta -= v; });
+    for (const x of xs) { x.ponad = false; x.bezPlanu = false; x.wPakiecie = pk; }
+    S.pakiety.set(pk.id, { pk, xs, plan, zapl, zostalo, ponad: zapl > plan });
   }
   S.calc = m;
   return m;
@@ -159,6 +179,7 @@ function tasma(zapl, zostalo, plan, skala) {
   return h + "</div>";
 }
 function pigulka(x) {
+  if (x.wPakiecie) return `<span class="pill mut">pakiet: ${esc(x.wPakiecie.nazwa)}</span>`;
   if (x.p.zakonczona) return `<span class="pill ok">zakończone</span>`;
   if (x.ponad) return `<span class="pill bad">ponad plan o ${zl(x.zapl - x.plan)}</span>`;
   if (x.bezPlanu) return `<span class="pill mut">z budżetu ogólnego</span>`;
@@ -170,7 +191,7 @@ function opcje(lista, wybrane, pusta, bez) {
   return (pusta ? `<option value="">${pusta}</option>` : "") + lista.map((x) => `<option value="${esc(x.id)}" ${x.id === wybrane ? "selected" : ""}>${esc(x.nazwa)}</option>`).join("") + (bez ? `<option value="-" ${wybrane === "-" ? "selected" : ""}>${bez}</option>` : "");
 }
 function opcjePoz(wyb) {
-  const o = (p) => `<option value="${esc(p.id)}" ${p.id === wyb ? "selected" : ""}>${esc(p.nazwa)}</option>`;
+  const o = (p) => `<option value="${esc(p.id)}" ${p.id === wyb ? "selected" : ""}>${esc(p.nazwa)}${p.pakiet && nazwaPak(p.pakiet) ? ` (pakiet ${esc(nazwaPak(p.pakiet))})` : ""}</option>`;
   let h = `<option value="">— wybierz pozycję —</option>`;
   for (const r of pom()) {
     const ps = pozycje().filter((p) => !p.zakup && p.pom === r.id);
@@ -257,17 +278,27 @@ function renderPodsumowanie() {
     <div class="panel"><h2>Kategorie</h2><div class="rows">${gk.map((g) => wierszGrupy("data-fkat", g.id || "-", g.id ? nazwaKat(g.id) : "Bez kategorii", g.s, maxK)).join("")}</div></div>
   </div>`;
 
+  licz();
+  const pakietyL = [...S.pakiety.values()];
+  if (pakietyL.length) h += `<div class="panel"><h2>Pakiety</h2><div class="rows">${pakietyL.map((g) => wierszPakietu(g)).join("")}</div><p class="hint" style="margin:8px 0 0">Pakiet liczy budżet wspólnie dla kilku pozycji, więc wpłat nie trzeba dzielić między nie.</p></div>`;
   const uwagi = w.filter((x) => x.ponad || (x.bezPlanu && x.zapl)).sort((a, b) => b.zapl - a.zapl);
+  for (const g of pakietyL) if (g.ponad) uwagi.unshift({ p: { id: "", nazwa: "Pakiet: " + g.pk.nazwa, pom: "" }, zapl: g.zapl, plan: g.plan, pakiet: g });
   const wyk = new Map();
   for (const pl of platnosci()) if (pl.gdzie && !poz(pl.pozycja)?.zakup) wyk.set(pl.gdzie, (wyk.get(pl.gdzie) || 0) + (pl.kwotaGr || 0));
   const wykL = [...wyk.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
   h += `<div class="grid2">
-    <div class="panel"><h2>Wymaga uwagi</h2>${uwagi.length ? `<div class="rows">${uwagi.map((x) => `<button class="row" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span><span class="a num">${zl(x.zapl)}</span><span class="m"><span>${esc(nazwaPom(x.p.pom))}</span>${pigulka(x)}</span></button>`).join("")}</div><p class="hint" style="margin:8px 0 0">Pozycje ponad planem i płatności spoza planów pozycji. Wszystkie schodzą z budżetu ogólnego.</p>` : `<p class="hint" style="margin:0">Wszystkie płatności mieszczą się w planach pozycji.</p>`}</div>
+    <div class="panel"><h2>Wymaga uwagi</h2>${uwagi.length ? `<div class="rows">${uwagi.map((x) => x.pakiet ? `<button class="row" type="button" data-fpak="${esc(x.pakiet.pk.id)}"><span class="n">${esc(x.p.nazwa)}</span><span class="a num">${zl(x.zapl)}</span><span class="m"><span>${x.pakiet.xs.length} pozycji</span><span class="pill bad">ponad plan o ${zl(x.zapl - x.plan)}</span></span></button>` : `<button class="row" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span><span class="a num">${zl(x.zapl)}</span><span class="m"><span>${esc(nazwaPom(x.p.pom))}</span>${pigulka(x)}</span></button>`).join("")}</div><p class="hint" style="margin:8px 0 0">Pozycje ponad planem i płatności spoza planów pozycji. Wszystkie schodzą z budżetu ogólnego.</p>` : `<p class="hint" style="margin:0">Wszystkie płatności mieszczą się w planach pozycji.</p>`}</div>
     <div class="panel"><h2>Wykonawcy i sklepy</h2>${wykL.length ? `<div class="rows">${wykL.map(([g, k]) => `<button class="row" type="button" data-fgdzie="${esc(g)}"><span class="n">${esc(g)}</span><span class="a num">${zl(k)}</span></button>`).join("")}</div>` : `<p class="hint" style="margin:0">Pojawią się, gdy przy płatnościach wpiszesz sklep albo wykonawcę.</p>`}</div>
   </div>`;
   h += `<div class="panel"><h2>Płatności w miesiącach</h2>${wykresMiesieczny()}</div>`;
   if (sz.n) h += `<div class="panel"><h2>Zakup domu</h2><div class="rows">${zakup().map((x) => `<button class="row" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span><span class="a num">${zl(x.zapl)}</span></button>`).join("")}</div><p class="hint" style="margin:8px 0 0">Razem <strong class="num">${zl(sz.zapl)}</strong>. Nie wlicza się do budżetu wykończenia.</p></div>`;
   el.innerHTML = h;
+}
+
+function wierszPakietu(g) {
+  const pill = g.ponad ? `<span class="pill bad">ponad plan o ${zl(g.zapl - g.plan)}</span>` : g.zostalo ? `<span class="pill mut">zostało ${zl(g.zostalo)}</span>` : `<span class="pill ok">zapłacone</span>`;
+  return `<button class="row" type="button" data-fpak="${esc(g.pk.id)}"><span class="n">${esc(g.pk.nazwa)}</span><span class="a num">${zl(g.zapl)} <span style="color:var(--muted)">/ ${zl(g.plan)}</span></span>
+    ${tasma(g.zapl, g.zostalo, g.plan)}<span class="m"><span>${g.xs.map((x) => esc(x.p.nazwa)).join(", ")}</span>${pill}</span></button>`;
 }
 
 /* ---------- pozycje ---------- */
@@ -276,6 +307,7 @@ function filtrPoz() {
   return [...licz().values()].filter((x) =>
     (!f.pom || (f.pom === "-" ? !pom().some((r) => r.id === x.p.pom) : x.p.pom === f.pom)) &&
     (!f.kat || (f.kat === "-" ? !kat().some((k) => k.id === x.p.kat) : x.p.kat === f.kat)) &&
+    (!f.pak || x.p.pakiet === f.pak) &&
     (!f.stan || (f.stan === "otwarte" ? !x.p.zakonczona && x.zostalo > 0 : f.stan === "zakonczone" ? x.p.zakonczona : f.stan === "ponad" ? x.ponad : f.stan === "bezplanu" ? x.bezPlanu : true)) &&
     (!q || [x.p.nazwa, x.p.notatka, nazwaPom(x.p.pom), nazwaKat(x.p.kat)].join(" ").toLowerCase().includes(q)));
 }
@@ -291,11 +323,11 @@ function renderPozycje() {
   $("#fp-kat").innerHTML = opcje(kat(), f.kat, "Wszystkie kategorie", "Bez kategorii");
   $("#fp-stan").value = f.stan;
   if ($("#fp-q") !== document.activeElement) $("#fp-q").value = f.q;
-  $("#fp-clear").hidden = !(f.q || f.pom || f.kat || f.stan);
+  $("#fp-clear").hidden = !(f.q || f.pom || f.kat || f.stan || f.pak);
   const el = $("#lista-poz");
   if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie…</div>`; return; }
   const l = filtrPoz(), sw = suma(l.filter((x) => !x.p.zakup));
-  $("#fp-sum").innerHTML = `<span>${l.length} z ${pozycje().length} pozycji</span><span>zapłacone <strong class="num">${zl(sw.zapl)}</strong> z planu <strong class="num">${zl(sw.plan)}</strong></span>`;
+  $("#fp-sum").innerHTML = `<span>${f.pak ? `Pakiet: ${esc(nazwaPak(f.pak))} · ` : ""}${l.length} z ${pozycje().length} pozycji</span><span>zapłacone <strong class="num">${zl(sw.zapl)}</strong> z planu <strong class="num">${zl(sw.plan)}</strong></span>`;
   if (!l.length) { el.innerHTML = `<div class="panel empty"><h3>${pozycje().length ? "Nic nie pasuje do filtrów" : "Brak pozycji"}</h3><p>${pozycje().length ? "Zmień filtry albo wyczyść wyszukiwanie." : "Dodaj pierwszą pozycję przyciskiem powyżej."}</p></div>`; return; }
   const grupy = [];
   for (const r of pom()) { const xs = l.filter((x) => !x.p.zakup && x.p.pom === r.id); if (xs.length) grupy.push([r.nazwa, xs]); }
@@ -345,11 +377,11 @@ function renderUstawienia(force) {
   const el = $("#v-ustawienia");
   if (!force && el.contains(document.activeElement) && document.activeElement.matches("input[type=text],input:not([type])")) return;
   if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie…</div>`; return; }
-  const ile = (pole, id) => pozycje().filter((p) => p[pole] === id).length;
+  const ile = (typ, id) => pozycje().filter((p) => p[SLOWNIK[typ].pole] === id).length;
   const ask = (typ, id) => {
     if (S.usuwanie?.typ !== typ || S.usuwanie.id !== id) return "";
-    const n = ile(typ, id), lista = typ === "pom" ? pom() : kat();
-    if (!n) return `<div class="ask">Usunąć? <button class="btn danger" type="button" data-del-ok>Usuń</button><button class="btn" type="button" data-del-no>Nie</button></div>`;
+    const n = ile(typ, id), lista = slownik(typ);
+    if (!n || typ === "pak") return typ === "pak" && n ? `<div class="ask">Usunąć pakiet? ${n} pozycji zostanie bez pakietu (nic nie znika). <button class="btn danger" type="button" data-del-ok>Usuń</button><button class="btn" type="button" data-del-no>Nie</button></div>` : `<div class="ask">Usunąć? <button class="btn danger" type="button" data-del-ok>Usuń</button><button class="btn" type="button" data-del-no>Nie</button></div>`;
     return `<div class="ask">${n} pozycji ma tę wartość. Przenieś je do: <select class="ctl" id="u-move">${opcje(lista.filter((x) => x.id !== id), "")}</select><button class="btn danger" type="button" data-del-ok>Przenieś i usuń</button><button class="btn" type="button" data-del-no>Anuluj</button></div>`;
   };
   const lista = (typ, items) => `<div class="slist">${items.map((x) => `<div class="srow k">
@@ -365,6 +397,9 @@ function renderUstawienia(force) {
       ${lista("kat", kat())}
       <form class="srow k" id="u-add-kat"><input class="ctl" type="text" placeholder="Nowa kategoria" aria-label="Nowa kategoria"><button class="btn" type="submit">Dodaj</button></form></div>
   </div>
+  <div class="panel stack"><div><h2>Pakiety</h2><p class="hint" style="margin:0">Kilka pozycji ze wspólnym budżetem, np. wykonawca robiący kilka prac z materiałami. Pozycję dopinasz do pakietu w jej formularzu.</p></div>
+    ${lista("pak", pak())}
+    <form class="srow k" id="u-add-pak"><input class="ctl" type="text" placeholder="Nowy pakiet" aria-label="Nowy pakiet"><button class="btn" type="submit">Dodaj</button></form></div>
   <div class="panel stack">
     <div><h2>Kopia i historia</h2><p class="hint" style="margin:0">Baza trzyma kopię 300 ostatnich wersji danych, więc pomyłkę da się cofnąć (poproś Claude’a). Pliki CSV otworzysz w Excelu i Google Sheets. Aplikacja działa od razu na każdym urządzeniu, wystarczy otworzyć adres strony.</p></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="u-csv-poz">CSV: pozycje</button><button class="btn" type="button" id="u-csv-pl">CSV: płatności</button></div>
@@ -379,8 +414,8 @@ function pobierzCsv(nazwa, rows) {
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 function csvPozycje() {
-  const rows = [["Pomieszczenie", "Pozycja", "Kategoria", "Plan", "Zapłacone", "Zostało", "Zakończona", "Zakup domu", "Notatka"]];
-  for (const x of licz().values()) rows.push([nazwaPom(x.p.pom), x.p.nazwa, nazwaKat(x.p.kat), { gr: x.plan }, { gr: x.zapl }, { gr: x.zostalo }, x.p.zakonczona ? "tak" : "", x.p.zakup ? "tak" : "", x.p.notatka]);
+  const rows = [["Pomieszczenie", "Pozycja", "Kategoria", "Plan", "Zapłacone", "Zostało", "Zakończona", "Zakup domu", "Pakiet", "Notatka"]];
+  for (const x of licz().values()) rows.push([nazwaPom(x.p.pom), x.p.nazwa, nazwaKat(x.p.kat), { gr: x.plan }, { gr: x.zapl }, { gr: x.zostalo }, x.p.zakonczona ? "tak" : "", x.p.zakup ? "tak" : "", nazwaPak(x.p.pakiet), x.p.notatka]);
   pobierzCsv("koszty-pozycje", rows);
 }
 function csvPlatnosci() {
@@ -407,8 +442,10 @@ function otworzPoz(id) {
       <div class="fg"><label for="p-plan">Plan (zł)</label><input class="ctl kw" id="p-plan" inputmode="decimal" value="${p?.planGr ? f0.format(p.planGr / 100) : ""}" placeholder="ile planujesz wydać"></div>
       <div class="fg checks"><label><input type="checkbox" id="p-zak" ${p?.zakonczona ? "checked" : ""}> Zakończone, nic więcej nie płacę</label><label><input type="checkbox" id="p-zakup" ${p?.zakup ? "checked" : ""}> Zakup domu (poza budżetem wykończenia)</label></div>
     </div>
+    ${pak().length ? `<div class="fg"><label for="p-pak">Pakiet <span class="hint">(wspólny budżet z innymi pozycjami)</span></label><select class="ctl" id="p-pak">${opcje(pak(), p ? p.pakiet || "" : S.fp.pak || "", "— bez pakietu —")}</select></div>` : ""}
     <div class="fg"><label for="p-notatka">Notatka</label><textarea class="ctl" id="p-notatka" rows="2" placeholder="zakres, ustalenia z wykonawcą…">${esc(p?.notatka || "")}</textarea></div>
     ${p ? `<div class="pozsum"><div><span class="lbl">Zapłacone</span><b class="num">${zl2(x.zapl)}</b></div><div><span class="lbl">Plan</span><b class="num">${x.plan ? zl2(x.plan) : "—"}</b></div><div><span class="lbl">Zostało</span><b class="num">${zl2(x.zostalo)}</b></div></div>${tasma(x.zapl, x.zostalo, x.plan)}
+      ${x.wPakiecie ? (() => { const g = S.pakiety.get(x.wPakiecie.id); return `<p class="hint" style="margin:0">W pakiecie „${esc(g.pk.nazwa)}”: plan ${zl(g.plan)}, zapłacone ${zl(g.zapl)}, zostało ${zl(g.zostalo)}. „Zostało” tej pozycji to jej część kwoty pakietu.</p>`; })() : ""}
       <div class="fg"><div class="pl-head"><span class="lbl">Płatności (${pl.length})</span><button class="btn" type="button" data-nowa-pl="${esc(p.id)}">+ Dodaj płatność</button></div>
       ${pl.length ? `<div>${pl.map(wierszPl).join("")}</div>` : `<p class="hint" style="margin:0">Brak płatności.</p>`}</div>` : ""}
     <div class="err" id="p-err" hidden></div>
@@ -423,7 +460,7 @@ async function zapiszPoz() {
   const plan = planTxt ? parseKwota(planTxt) : 0;
   const blad = !nazwa ? "Wpisz nazwę pozycji." : plan === null || plan < 0 ? "Plan wpisz jako liczbę, np. 45000." : !$("#p-pom").value ? "Wybierz pomieszczenie." : !$("#p-kat").value ? "Wybierz kategorię." : "";
   if (blad) { const e = $("#p-err"); e.textContent = blad; e.hidden = false; return; }
-  const dane = { nazwa, pom: $("#p-pom").value, kat: $("#p-kat").value, planGr: plan || 0, zakonczona: $("#p-zak").checked, zakup: $("#p-zakup").checked, notatka: $("#p-notatka").value.trim() };
+  const dane = { nazwa, pom: $("#p-pom").value, kat: $("#p-kat").value, planGr: plan || 0, zakonczona: $("#p-zak").checked, zakup: $("#p-zakup").checked, pakiet: $("#p-pak")?.value || "", notatka: $("#p-notatka").value.trim() };
   try {
     await zmien(`${S.sheet.id ? "Pozycja" : "Nowa pozycja"}: ${nazwa}`, (d) => {
       const p = d.pozycje.find((q) => q.id === id);
@@ -595,7 +632,7 @@ function wire() {
   $("#fp-pom").addEventListener("change", (e) => { S.fp.pom = e.target.value; renderPozycje(); });
   $("#fp-kat").addEventListener("change", (e) => { S.fp.kat = e.target.value; renderPozycje(); });
   $("#fp-stan").addEventListener("change", (e) => { S.fp.stan = e.target.value; renderPozycje(); });
-  $("#fp-clear").addEventListener("click", () => { S.fp = { q: "", pom: "", kat: "", stan: "" }; renderPozycje(); });
+  $("#fp-clear").addEventListener("click", () => { S.fp = { q: "", pom: "", kat: "", stan: "", pak: "" }; renderPozycje(); });
   $("#fl-q").addEventListener("input", (e) => { S.fl.q = e.target.value; renderPlatnosci(); });
   $("#fl-pom").addEventListener("change", (e) => { S.fl.pom = e.target.value; renderPlatnosci(); });
   $("#fl-gdzie").addEventListener("change", (e) => { S.fl.gdzie = e.target.value; renderPlatnosci(); });
@@ -608,8 +645,9 @@ function wire() {
     const nPl = t.closest("[data-nowa-pl]"); if (nPl) { otworzPl(null, nPl.dataset.nowaPl, nPl.dataset.nowaPl); return; }
     if (t.closest("[data-nowa-poz]")) { otworzPoz(null); return; }
     if (t.closest("[data-zamknij]")) { zamknij(true); return; }
-    const fp = t.closest("[data-fpom]"); if (fp) { S.fp = { q: "", pom: fp.dataset.fpom, kat: "", stan: "" }; idz("pozycje"); return; }
-    const fk = t.closest("[data-fkat]"); if (fk) { S.fp = { q: "", pom: "", kat: fk.dataset.fkat, stan: "" }; idz("pozycje"); return; }
+    const fp = t.closest("[data-fpom]"); if (fp) { S.fp = { q: "", pom: fp.dataset.fpom, kat: "", stan: "", pak: "" }; idz("pozycje"); return; }
+    const fpk = t.closest("[data-fpak]"); if (fpk) { S.fp = { q: "", pom: "", kat: "", stan: "", pak: fpk.dataset.fpak }; idz("pozycje"); return; }
+    const fk = t.closest("[data-fkat]"); if (fk) { S.fp = { q: "", pom: "", kat: fk.dataset.fkat, stan: "", pak: "" }; idz("pozycje"); return; }
     const fg = t.closest("[data-fgdzie]"); if (fg) { S.fl = { q: "", pom: "", gdzie: fg.dataset.fgdzie }; idz("platnosci"); return; }
     const z = t.closest("[data-zoom]"); if (z && z.src) { const lb = document.createElement("div"); lb.className = "lightbox"; lb.innerHTML = `<img src="${z.src}" alt="">`; lb.addEventListener("click", () => lb.remove()); document.body.append(lb); return; }
     const pdf = t.closest("[data-pdf]"); if (pdf) { const okno = window.open("", "_blank"); blobUrl(pdf.dataset.pdf).then((u) => { if (okno) okno.location.href = u; else location.href = u; }, () => { okno?.close(); toast("Nie udało się otworzyć pliku."); }); return; }
@@ -628,24 +666,24 @@ function wire() {
     const t = ev.target;
     if (t.id === "pl-file") { const fs = [...t.files]; t.value = ""; if (fs.length) wgraj(fs); return; }
     const u = t.dataset.u; if (!u || !S.gotowe) return;
-    const id = t.dataset.id, lista = u === "pom" ? pom() : kat();
+    const id = t.dataset.id, lista = slownik(u);
     const x = lista.find((y) => y.id === id), v = t.value.trim();
     if (!x || !v || v === x.nazwa) { t.value = x?.nazwa || ""; return; }
     t.blur();
-    zmien(`Zmiana nazwy: ${x.nazwa} → ${v}`, (d) => { const y = (u === "pom" ? d.ustawienia.pomieszczenia : d.ustawienia.kategorie).find((q) => q.id === id); if (y) y.nazwa = v; }).catch(bladZapisu);
+    zmien(`Zmiana nazwy: ${x.nazwa} → ${v}`, (d) => { const y = (d.ustawienia[SLOWNIK[u].klucz] ??= []).find((q) => q.id === id); if (y) y.nazwa = v; }).catch(bladZapisu);
   });
   document.addEventListener("submit", (ev) => {
     const f = ev.target;
     ev.preventDefault();
     if (f.id === "form-poz") { zapiszPoz(); return; }
     if (f.id === "form-pl") { zapiszPl(false); return; }
-    if (f.id === "u-add-pom" || f.id === "u-add-kat") {
+    if (f.id === "u-add-pom" || f.id === "u-add-kat" || f.id === "u-add-pak") {
       const inp = f.querySelector("input"), n = inp.value.trim(); if (!n) return;
-      const czyPom = f.id === "u-add-pom";
-      if ((czyPom ? pom() : kat()).some((x) => x.nazwa.toLowerCase() === n.toLowerCase())) { toast(`„${n}” już jest na liście.`); return; }
+      const typ = f.id.slice(6);
+      if (slownik(typ).some((x) => x.nazwa.toLowerCase() === n.toLowerCase())) { toast(`„${n}” już jest na liście.`); return; }
       inp.value = ""; inp.blur();
-      zmien(`Dodano ${czyPom ? "pomieszczenie" : "kategorię"}: ${n}`, (d) => {
-        const l = czyPom ? d.ustawienia.pomieszczenia : d.ustawienia.kategorie;
+      zmien(`Dodano ${SLOWNIK[typ].nazwa}: ${n}`, (d) => {
+        const l = (d.ustawienia[SLOWNIK[typ].klucz] ??= []);
         l.push({ id: noweId(l, n), nazwa: n });
       }).catch(bladZapisu);
     }
@@ -667,12 +705,13 @@ function wire() {
 }
 async function usunSlownik() {
   const { typ, id } = S.usuwanie;
-  const n = pozycje().filter((p) => p[typ] === id).length, cel = $("#u-move")?.value;
-  if (n && !cel) return;
+  const pole = SLOWNIK[typ].pole;
+  const n = pozycje().filter((p) => p[pole] === id).length, cel = typ === "pak" ? "" : $("#u-move")?.value;
+  if (n && !cel && typ !== "pak") return;
   try {
-    await zmien(`Usunięto ${typ === "pom" ? "pomieszczenie" : "kategorię"} ${id}${n ? `, przeniesiono ${n} pozycji` : ""}`, (d) => {
-      for (const p of d.pozycje) if (p[typ] === id) p[typ] = cel;
-      const l = typ === "pom" ? d.ustawienia.pomieszczenia : d.ustawienia.kategorie;
+    await zmien(`Usunięto ${SLOWNIK[typ].nazwa} ${id}${n ? `, przeniesiono ${n} pozycji` : ""}`, (d) => {
+      for (const p of d.pozycje) if (p[pole] === id) p[pole] = cel;
+      const l = d.ustawienia[SLOWNIK[typ].klucz] ??= [];
       const i = l.findIndex((x) => x.id === id); if (i >= 0) l.splice(i, 1);
     });
     S.usuwanie = null; renderUstawienia(true);
