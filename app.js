@@ -98,24 +98,22 @@ function blobUrl(id) {
 /* ---------- stan ---------- */
 const S = {
   dane: null, wersja: 0, gotowe: false, blad: "", calc: null,
-  view: "podsumowanie",
-  fp: { q: "", pom: "", kat: "", stan: "", pak: "" },
-  fl: { q: "", pom: "", gdzie: "" },
-  sheet: null, usuwanie: null,
+  ekran: { typ: "dom" },
+  fl: { q: "", stan: "", pom: "" },
+  fp: { gdzie: "" },
+  sheet: null, menu: false, usuwanie: null, ostatnie: {},
 };
-const WIDOKI = ["podsumowanie", "pozycje", "platnosci", "ustawienia"];
 function ustawDane(d) { S.dane = d; S.gotowe = true; S.calc = null; render(); }
 const pom = () => S.dane?.ustawienia.pomieszczenia || [];
 const kat = () => S.dane?.ustawienia.kategorie || [];
 const pak = () => S.dane?.ustawienia.pakiety || [];
 const nazwaPak = (id) => pak().find((p) => p.id === id)?.nazwa || "";
-/* słowniki: pomieszczenia, kategorie i pakiety; pole = nazwa pola w pozycji */
 const SLOWNIK = { pom: { klucz: "pomieszczenia", pole: "pom", nazwa: "pomieszczenie" }, kat: { klucz: "kategorie", pole: "kat", nazwa: "kategorię" }, pak: { klucz: "pakiety", pole: "pakiet", nazwa: "pakiet" } };
 const slownik = (typ) => S.dane?.ustawienia[SLOWNIK[typ].klucz] || [];
 const pozycje = () => S.dane?.pozycje || [];
 const platnosci = () => S.dane?.platnosci || [];
 const nazwaPom = (id) => pom().find((p) => p.id === id)?.nazwa || "Bez pomieszczenia";
-const nazwaKat = (id) => kat().find((k) => k.id === id)?.nazwa || "Bez kategorii";
+const nazwaKat = (id) => kat().find((k) => k.id === id)?.nazwa || "";
 const poz = (id) => pozycje().find((p) => p.id === id);
 
 /* Plan obejmuje to, co już zapłacone: pozycja ma do zapłaty plan minus zapłacone (zakończona: nic) */
@@ -155,437 +153,307 @@ function suma(lista) {
 }
 const wykonczenie = () => [...licz().values()].filter((x) => !x.p.zakup);
 const zakup = () => [...licz().values()].filter((x) => x.p.zakup);
+const wykonawcy = () => [...new Set(platnosci().map((p) => p.gdzie).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
+const kupioneProdukty = () => new Set(platnosci().filter((q) => q.produkt).map((q) => q.produkt));
 
-/* ---------- komunikaty ---------- */
-let toastT;
-function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 4200); }
-function sync(s, txt) { const e = $("#sync"); e.dataset.s = s; e.textContent = txt; }
-function bladZapisu(e) {
-  const c = e?.code;
-  if (c === "siec") { sync("err", "Brak internetu"); toast("Brak połączenia z internetem. Nic nie zostało zapisane."); return; }
-  if (c === "brak-bazy") { sync("err", "Baza nieprzygotowana"); toast("Baza nie jest przygotowana. Trzeba uruchomić supabase.sql w Supabase."); return; }
-  if (c === "konflikt") { sync("err", "Nie zapisano"); toast("Ktoś zapisywał w tym samym czasie. Spróbuj jeszcze raz."); return; }
-  sync("err", "Nie zapisano"); toast("Nie udało się zapisać. Spróbuj ponownie.");
+/* ---------- kolory i ikony pomieszczeń ---------- */
+const PASTELE = ["#F8DA6B", "#F6B9D6", "#C8C4F4", "#AEE3D6", "#FBD2AE", "#BCD5F3", "#CFDC9E", "#F6A193", "#E3C5F0", "#EBDCC3"];
+const kolorPom = (id) => { const r = pom().find((p) => p.id === id); if (r?.kolor) return r.kolor; const i = pom().findIndex((p) => p.id === id); return i < 0 ? "#E4E4EA" : PASTELE[i % PASTELE.length]; };
+const IKONY = {
+  dom: "M3.5 10.5 12 4l8.5 6.5V20a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z",
+  lista: "M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01",
+  portfel: "M3.5 7.5h17v12h-17zM3.5 11h17M15.5 15.5h2",
+  suwaki: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
+  plus: "M12 5v14M5 12h14",
+  wstecz: "M14.5 5.5 8 12l6.5 6.5",
+  olowek: "M4 20h4L19.5 8.5l-4-4L4 16z",
+  x: "M6 6l12 12M18 6 6 18",
+  aparat: "M4 8h3l2-2.5h6L17 8h3v11H4zM12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z",
+  strzalka: "M8 16 16 8M10 8h6v6",
+  szukaj: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM16 16l4 4",
+  kuchnia: "M4.5 10h15v5.5a4 4 0 0 1-4 4h-7a4 4 0 0 1-4-4zM2.5 10h2M19.5 10h2M9.5 7c0-1.2 1-1.4 1-2.6M13.5 7c0-1.2 1-1.4 1-2.6",
+  lazienka: "M3 12h18v1.5a5.5 5.5 0 0 1-5.5 5.5h-7A5.5 5.5 0 0 1 3 13.5zM6 12V6.5a2 2 0 0 1 4 0M7 19l-1 2M17 19l1 2",
+  toaleta: "M12 3.5s6 6.6 6 10.5a6 6 0 0 1-12 0c0-3.9 6-10.5 6-10.5z",
+  sypialnia: "M3 19V7M3 14h18v5M21 14v-1.5a3 3 0 0 0-3-3h-8V14M6.5 11.5h.01",
+  garderoba: "M12 7.5a2 2 0 1 1 2-2M12 7.5V9l-8.5 7h17L12 9",
+  salon: "M5 11V9a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v2M4 11a2 2 0 0 1 2 2v1.5h12V13a2 2 0 1 1 2 2v3H4v-3a2 2 0 0 1 0-4zM6.5 18v2M17.5 18v2",
+  przedpokoj: "M6.5 21V4.5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1V21M3.5 21h17M14 12.5h.01",
+  kotlownia: "M12 3c1.8 3.6 6 5.6 6 10.8a6 6 0 0 1-12 0c0-2.8 1.6-4.6 2.8-5.6 0 1.8.9 2.8 1.9 2.8 0-2.7-.9-4.6 1.3-8z",
+  zewnatrz: "M12 21v-4.5M6.5 16.5h11L12 4z",
+  inne: "M5 5h6v6H5zM13 5h6v6h-6zM5 13h6v6H5zM13 13h6v6h-6z",
+};
+const ikona = (k, rozm = 22) => `<svg class="ik" width="${rozm}" height="${rozm}" viewBox="0 0 24 24" aria-hidden="true"><path d="${IKONY[k] || IKONY.inne}"/></svg>`;
+function ikonaPom(id) {
+  const s = slug(nazwaPom(id));
+  const k = /kuch/.test(s) ? "kuchnia" : /lazien/.test(s) ? "lazienka" : /toalet|wc/.test(s) ? "toaleta" : /sypial/.test(s) ? "sypialnia" : /garder/.test(s) ? "garderoba" : /salon|pokoj-dzien/.test(s) ? "salon" : /przedpok|hol/.test(s) ? "przedpokoj" : /kotlow|piec/.test(s) ? "kotlownia" : /zewn|ogrod|dzialk|taras/.test(s) ? "zewnatrz" : /caly|dom/.test(s) ? "dom" : "inne";
+  return ikona(k);
 }
 
-/* ---------- elementy wspólne ---------- */
-function tasma(zapl, zostalo, plan, skala) {
-  const max = Math.max(plan || 0, zapl + zostalo, skala || 0, 1);
-  const pw = (zapl / max) * 100, ph = (zostalo / max) * 100;
-  let h = `<div class="tape" role="img" aria-label="Zapłacone ${zl(zapl)}, zostało ${zl(zostalo)}${plan ? ", plan " + zl(plan) : ""}">`;
-  if (zapl) h += `<span class="p" style="width:${pw}%"></span>`;
-  if (zostalo) h += `<span class="h" style="left:calc(${pw}% + ${zapl ? 2 : 0}px);width:max(0px,calc(${ph}% - ${zapl ? 2 : 0}px))"></span>`;
-  if (plan && zapl + zostalo > plan) h += `<span class="lim" style="left:calc(${(plan / max) * 100}% - 1px)"></span>`;
-  return h + "</div>";
+/* ---------- drobne elementy ---------- */
+const kw = (gr) => `${f0.format(Math.round((gr || 0) / 100))}<small> zł</small>`;
+function pasek(zapl, zostalo, plan) {
+  const max = Math.max(plan, zapl + zostalo, 1);
+  const a = (zapl / max) * 100, b = (zostalo / max) * 100;
+  return `<div class="bar" role="img" aria-label="Zapłacone ${zl(zapl)}, zostało ${zl(zostalo)}">${zapl ? `<i class="z" style="width:${a}%"></i>` : ""}${zostalo ? `<i class="r" style="width:${b}%"></i>` : ""}${plan && zapl > plan ? `<b class="lim" style="left:${(plan / max) * 100}%"></b>` : ""}</div>`;
 }
-function pigulka(x) {
-  if (x.wPakiecie) return `<span class="pill mut">pakiet: ${esc(x.wPakiecie.nazwa)}</span>`;
-  if (x.p.zakonczona) return `<span class="pill ok">zakończone</span>`;
-  if (x.ponad) return `<span class="pill bad">ponad plan o ${zl(x.zapl - x.plan)}</span>`;
-  if (x.bezPlanu) return `<span class="pill mut">z budżetu ogólnego</span>`;
-  if (!x.zapl) return `<span class="pill mut">nic nie zapłacono</span>`;
+function stanPozycji(x) {
+  if (x.wPakiecie) return `<span class="tag">pakiet ${esc(x.wPakiecie.nazwa.split(":")[0])}</span>`;
+  if (x.p.zakonczona) return `<span class="tag ok">zakończone</span>`;
+  if (x.ponad) return `<span class="tag zle">ponad plan o ${zl(x.zapl - x.plan)}</span>`;
+  if (x.bezPlanu && x.zapl) return `<span class="tag uwaga">bez planu</span>`;
   return "";
 }
-const legenda = `<div class="overall-legend"><span class="key"><i></i>zapłacone</span><span class="key"><i class="h"></i>zostało do zapłaty</span><span class="key"><i class="l"></i>plan (gdy przekroczony)</span></div>`;
-function opcje(lista, wybrane, pusta, bez) {
-  return (pusta ? `<option value="">${pusta}</option>` : "") + lista.map((x) => `<option value="${esc(x.id)}" ${x.id === wybrane ? "selected" : ""}>${esc(x.nazwa)}</option>`).join("") + (bez ? `<option value="-" ${wybrane === "-" ? "selected" : ""}>${bez}</option>` : "");
+function wierszPozycji(x, zKolorem) {
+  return `<a class="poz" href="#poz/${esc(x.p.id)}">
+    ${zKolorem ? `<span class="kropka" style="background:${x.p.zakup ? "#E4E4EA" : kolorPom(x.p.pom)}"></span>` : ""}
+    <span class="poz-g"><span class="poz-n">${esc(x.p.nazwa)}</span><span class="poz-k">${zl(x.zapl)}${x.plan ? ` z ${zl(x.plan)}` : ""}</span></span>
+    <span class="poz-m">${[nazwaKat(x.p.kat), x.p.produkty?.length ? `${x.p.produkty.length} prod.` : ""].filter(Boolean).map(esc).join(", ")}${stanPozycji(x)}</span>
+    ${pasek(x.zapl, x.zostalo, x.plan)}
+  </a>`;
 }
-function opcjePoz(wyb) {
-  const o = (p) => `<option value="${esc(p.id)}" ${p.id === wyb ? "selected" : ""}>${esc(p.nazwa)}${p.pakiet && nazwaPak(p.pakiet) ? ` (pakiet ${esc(nazwaPak(p.pakiet))})` : ""}</option>`;
-  let h = `<option value="">— wybierz pozycję —</option>`;
-  for (const r of pom()) {
-    const ps = pozycje().filter((p) => !p.zakup && p.pom === r.id);
-    if (ps.length) h += `<optgroup label="${esc(r.nazwa)}">${ps.map(o).join("")}</optgroup>`;
-  }
-  const sieroty = pozycje().filter((p) => !p.zakup && !pom().some((r) => r.id === p.pom));
-  if (sieroty.length) h += `<optgroup label="Bez pomieszczenia">${sieroty.map(o).join("")}</optgroup>`;
-  const zk = pozycje().filter((p) => p.zakup);
-  if (zk.length) h += `<optgroup label="Zakup domu">${zk.map(o).join("")}</optgroup>`;
-  return h;
+function wierszPlatnosci(pl, bezPozycji) {
+  const p = poz(pl.pozycja);
+  const tytul = pl.zrodlo === "arkusz" ? (p?.nazwa || "Płatność") : (pl.opis || p?.nazwa || "Płatność");
+  const pod = [pl.zrodlo === "arkusz" ? "z arkusza" : !bezPozycji && pl.opis && p ? p.nazwa : "", pl.gdzie, p && !bezPozycji ? (p.zakup ? "zakup domu" : nazwaPom(p.pom)) : ""].filter(Boolean).map(esc).join(", ");
+  return `<button class="pl" type="button" data-pl="${esc(pl.id)}"><span class="pl-g"><span class="pl-n">${esc(tytul)}</span><span class="pl-k">${kw(pl.kwotaGr)}</span></span><span class="pl-m">${pl.data ? dataPL(pl.data) + (pod ? ", " : "") : ""}${pod}${pl.pliki?.length ? ` <span class="spinacz">📎${pl.pliki.length}</span>` : ""}</span></button>`;
 }
-const wykonawcy = () => [...new Set(platnosci().map((p) => p.gdzie).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
+function pierscien(proc) {
+  const r = 30, c = 2 * Math.PI * r, p = Math.max(0, Math.min(proc, 100));
+  return `<svg class="ring" viewBox="0 0 76 76" aria-hidden="true"><circle cx="38" cy="38" r="${r}" class="ring-t"/><circle cx="38" cy="38" r="${r}" class="ring-v" stroke-dasharray="${(c * p) / 100} ${c}" transform="rotate(-90 38 38)"/></svg>`;
+}
+const naglowek = (tytul, wstecz, prawy = "") => `<header class="top">${wstecz ? `<a class="okr" href="${wstecz}" aria-label="Wstecz">${ikona("wstecz")}</a>` : ""}<h1>${tytul}</h1>${prawy}</header>`;
 
-/* ---------- podsumowanie ---------- */
-function niceStep(max) {
-  const raw = max / 3, p = Math.pow(10, Math.floor(Math.log10(raw)));
-  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= raw) return m * p;
-  return 10 * p;
-}
-const krotko = (v) => v >= 1000 ? (Math.round(v / 100) / 10).toLocaleString("pl-PL") + " tys." : f0.format(v) + " zł";
-function wykresMiesieczny() {
-  const zPoz = new Set(pozycje().filter((p) => !p.zakup).map((p) => p.id));
-  const lista = platnosci().filter((w) => w.data && zPoz.has(w.pozycja));
-  const bezDaty = platnosci().filter((w) => !w.data && zPoz.has(w.pozycja)).reduce((a, w) => a + (w.kwotaGr || 0), 0);
-  const nota = bezDaty ? `<p class="hint" style="margin:10px 0 0">Bez daty (przeniesione z arkusza): ${zl(bezDaty)}, nie ma ich na wykresie.</p>` : "";
-  if (!lista.length) return `<p class="hint" style="margin:0">Wykres pojawi się, gdy dodasz płatności z datą.</p>${nota}`;
-  const m = {};
-  for (const w of lista) { const k = w.data.slice(0, 7); m[k] = (m[k] || 0) + (w.kwotaGr || 0); }
-  const keys = Object.keys(m).sort();
-  let [y, mo] = keys[0].split("-").map(Number);
-  const now = new Date(), endY = now.getFullYear(), endM = now.getMonth() + 1;
-  const last = keys[keys.length - 1].split("-").map(Number);
-  const [ly, lm] = (last[0] * 12 + last[1] > endY * 12 + endM) ? last : [endY, endM];
-  const mies = [];
-  while (y * 12 + mo <= ly * 12 + lm) { mies.push(`${y}-${pad(mo)}`); mo++; if (mo > 12) { mo = 1; y++; } }
-  const pokaz = mies.slice(-18);
-  const vals = pokaz.map((k) => (m[k] || 0) / 100);
-  const vmax = Math.max(...vals, 1), step = niceStep(vmax), top = Math.ceil(vmax / step) * step;
-  const imax = vals.indexOf(Math.max(...vals));
-  let gl = "";
-  for (let v = 0; v <= top + 0.001; v += step) gl += `<div class="gl" style="bottom:${(v / top) * 190}px"><span>${f0.format(v >= 1000 ? v / 1000 : v)}${v >= 1000 ? " tys." : ""}</span></div>`;
-  const cols = pokaz.map((k, i) => {
-    const [yy, mm] = k.split("-");
-    const tip = `${MIES[+mm - 1]} ${yy}: ${zl(m[k] || 0)}`;
-    const lab = (i === imax || i === pokaz.length - 1) && vals[i] ? `<em style="bottom:${(vals[i] / top) * 100}%">${krotko(vals[i])}</em>` : "";
-    return `<div class="c" data-tip="${esc(tip)}">${lab}<b style="height:${(vals[i] / top) * 100}%"></b></div>`;
-  }).join("");
-  const xl = pokaz.map((k, i) => { const [yy, mm] = k.split("-"); return `<span>${MIES_K[+mm - 1]}${mm === "01" || i === 0 ? " " + yy.slice(2) : ""}</span>`; }).join("");
-  return `<div class="chart-wrap"><div class="chart-inner"><div class="chart"><div class="plot">${gl}<div class="cols">${cols}</div></div><div class="xl">${xl}</div></div></div></div>${nota}`;
-}
-function wierszGrupy(attr, id, nazwa, s, skala) {
-  const over = s.plan && s.zapl > s.plan;
-  const pill = over ? `<span class="pill bad">ponad plan o ${zl(s.zapl - s.plan)}</span>` : s.zostalo ? `<span class="pill mut">zostało ${zl(s.zostalo)}</span>` : `<span class="pill ok">zapłacone</span>`;
-  return `<button class="row" type="button" ${attr}="${esc(id)}"><span class="n">${esc(nazwa)}</span><span class="a num">${zl(s.zapl)} <span style="color:var(--muted)">/ ${zl(s.plan)}</span></span>
-    ${tasma(s.zapl, s.zostalo, s.plan, skala)}<span class="m"><span>${s.n} poz.</span>${pill}</span></button>`;
-}
-function renderPodsumowanie() {
-  const el = $("#v-podsumowanie");
-  if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie danych z GitHuba…</div>`; return; }
+/* ---------- ekran: Dom ---------- */
+function ekranDom() {
   const w = wykonczenie(), s = suma(w), sz = suma(zakup());
-  /* Budżet = kwota wpisana przez Roberta (ile ma pieniędzy). Dopóki jej nie ma, liczymy od sumy planów pozycji. */
   const wpisany = S.dane.ustawienia.budzetGr || 0, budzet = wpisany || s.plan;
   const pieniadze = budzet - s.zapl, brak = s.zostalo - pieniadze;
-  const kafelBudzetu = S.edytujBudzet
-    ? `<form class="kpi" id="form-budzet"><label class="lbl" for="b-kwota">Budżet wykończenia</label><input class="ctl kw" id="b-kwota" inputmode="decimal" value="${wpisany ? f0.format(wpisany / 100) : ""}" placeholder="ile masz pieniędzy"><span class="d" style="display:flex;gap:6px"><button class="btn pri" type="submit">Zapisz</button><button class="btn" type="button" id="b-anuluj">Anuluj</button></span></form>`
-    : `<div class="kpi"><span class="lbl">Budżet wykończenia</span><span class="v num">${wpisany ? zl(wpisany) : "—"}</span><span class="d">${wpisany ? `plany pozycji: ${zl(s.plan)} · ` : ""}<button class="btn link" type="button" id="b-edytuj" style="padding:0">${wpisany ? "zmień" : "Wpisz, ile masz pieniędzy"}</button></span></div>`;
-  let h = `<div class="kpis">
-    ${kafelBudzetu}
-    <div class="kpi"><span class="lbl">Zapłacone</span><span class="v num">${zl(s.zapl)}</span><span class="d">${budzet ? Math.round((s.zapl / budzet) * 100) + "% budżetu" : "&nbsp;"}</span></div>
-    <div class="kpi"><span class="lbl">${wpisany ? "Zostało pieniędzy" : "Zostało w planach"}</span><span class="v num ${pieniadze < 0 ? "neg" : ""}">${zl(pieniadze)}</span><span class="d">${wpisany ? "budżet minus zapłacone" : "suma planów minus zapłacone"}</span></div>
-    <div class="kpi"><span class="lbl">Potrzeba jeszcze</span><span class="v num ${brak > 0 ? "neg" : ""}">${zl(s.zostalo)}</span><span class="d">${brak > 0 ? `brakuje ${zl(brak)}` : brak < 0 ? `zapas ${zl(-brak)}` : "na styk"}</span></div>
+  const proc = budzet ? Math.round((s.zapl / budzet) * 100) : 0;
+  const d = new Date();
+  let h = `<header class="top dom-top"><div><p class="powitanie">Dom, ${d.getDate()} ${["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września", "października", "listopada", "grudnia"][d.getMonth()]}</p><h1>Wykończenie</h1></div><span class="sync" id="sync" data-s="ok"></span></header>`;
+  h += `<section class="hero">
+    <div class="hero-g"><div><p class="hero-l">Wydane</p><p class="hero-v">${kw(s.zapl)}</p><p class="hero-s">z ${zl(budzet)} ${wpisany ? "budżetu" : "w planach"}</p></div><div class="hero-r">${pierscien(proc)}<span>${proc}%</span></div></div>
+    ${pasek(s.zapl, s.zostalo, budzet)}
+  </section>
+  <div class="duo">
+    <button class="mini mini-y" type="button" data-budzet>${wpisany ? `<p class="mini-l">Zostało pieniędzy</p><p class="mini-v ${pieniadze < 0 ? "zle" : ""}">${kw(pieniadze)}</p><p class="mini-s">budżet ${zl(wpisany)}</p>` : `<p class="mini-l">Ile masz pieniędzy?</p><p class="mini-v">Wpisz budżet</p><p class="mini-s">porównam z planami</p>`}</button>
+    <div class="mini mini-w"><p class="mini-l">Potrzeba jeszcze</p><p class="mini-v">${kw(s.zostalo)}</p><p class="mini-s ${brak > 0 ? "zle" : "ok"}">${brak > 0 ? `brakuje ${zl(brak)}` : `zapas ${zl(-brak)}`}</p></div>
   </div>`;
-  if (!s.n) {
-    el.innerHTML = h + `<div class="panel empty"><h3>Brak pozycji</h3><p>Dodaj pierwszą pozycję, np. „Meble kuchnia” z planowaną kwotą, a potem podpinaj pod nią płatności.</p><button class="btn pri" type="button" data-nowa-poz>+ Nowa pozycja</button></div>`;
-    return;
+  const uwagi = w.filter((x) => x.ponad || (x.bezPlanu && x.zapl));
+  const pakPonad = [...S.pakiety.values()].filter((g) => g.ponad);
+  if (uwagi.length || pakPonad.length) {
+    const kwota = uwagi.reduce((a, x) => a + (x.ponad ? x.zapl - x.plan : x.zapl), 0) + pakPonad.reduce((a, g) => a + g.zapl - g.plan, 0);
+    h += `<a class="alert" href="#lista/uwaga"><span class="alert-i">!</span><span><b>${uwagi.length + pakPonad.length} ${uwagi.length + pakPonad.length === 1 ? "pozycja" : "pozycje"} poza planem</b><span>${zl(kwota)} ponad plany: ${[...pakPonad.map((g) => g.pk.nazwa), ...uwagi.map((x) => x.p.nazwa)].map(esc).join(", ")}</span></span>${ikona("strzalka", 20)}</a>`;
   }
-  const bezPlanu = w.filter((x) => x.bezPlanu && x.zapl);
-  h += `<div class="panel overall"><div class="lbl">Wykończenie · ${wpisany ? "budżet" : "plany pozycji"} ${zl(budzet)}${sz.n ? ` · razem z zakupem domu ${zl(budzet + sz.zapl)}` : ""}</div>${tasma(s.zapl, s.zostalo, budzet)}${legenda}
-    ${wpisany
-      ? `<p class="hint" style="margin:0">Otwarte pozycje potrzebują jeszcze ${zl(s.zostalo)}, a zostało ${zl(pieniadze)}. ${brak > 0 ? `Brakuje ${zl(brak)}.` : `Zostaje zapas ${zl(-brak)}.`} Plany wszystkich pozycji razem: ${zl(s.plan)}${s.plan > wpisany ? `, czyli o ${zl(s.plan - wpisany)} więcej niż budżet` : ""}.</p>`
-      : brak > 0 ? `<p class="hint" style="margin:0">Otwarte pozycje potrzebują jeszcze ${zl(s.zostalo)}, a w planach zostało ${zl(pieniadze)}. Różnicę ${zl(brak)} tworzą płatności z pozycji bez własnego planu: ${bezPlanu.map((x) => esc(x.p.nazwa)).join(", ")}. Wpisz budżet, żeby porównać to z pieniędzmi, które masz.</p>` : ""}</div>`;
-
-  const grupy = (klucz, lista) => {
-    const g = new Map();
-    for (const x of w) { const k = lista.some((r) => r.id === x.p[klucz]) ? x.p[klucz] : ""; if (!g.has(k)) g.set(k, []); g.get(k).push(x); }
-    return [...g.entries()].map(([id, xs]) => ({ id, s: suma(xs) })).sort((a, b) => (b.s.plan || b.s.zapl) - (a.s.plan || a.s.zapl));
-  };
-  const gp = grupy("pom", pom()), gk = grupy("kat", kat());
-  const maxP = Math.max(...gp.map((g) => Math.max(g.s.plan, g.s.zapl)), 1), maxK = Math.max(...gk.map((g) => Math.max(g.s.plan, g.s.zapl)), 1);
-  h += `<div class="grid2">
-    <div class="panel"><h2>Pomieszczenia</h2><div class="rows">${gp.map((g) => wierszGrupy("data-fpom", g.id || "-", g.id ? nazwaPom(g.id) : "Bez pomieszczenia", g.s, maxP)).join("")}</div></div>
-    <div class="panel"><h2>Kategorie</h2><div class="rows">${gk.map((g) => wierszGrupy("data-fkat", g.id || "-", g.id ? nazwaKat(g.id) : "Bez kategorii", g.s, maxK)).join("")}</div></div>
-  </div>`;
-
-  licz();
-  const pakietyL = [...S.pakiety.values()];
-  if (pakietyL.length) h += `<div class="panel"><h2>Pakiety</h2><div class="rows">${pakietyL.map((g) => wierszPakietu(g)).join("")}</div><p class="hint" style="margin:8px 0 0">Pakiet liczy budżet wspólnie dla kilku pozycji, więc wpłat nie trzeba dzielić między nie.</p></div>`;
-  const uwagi = w.filter((x) => x.ponad || (x.bezPlanu && x.zapl)).sort((a, b) => b.zapl - a.zapl);
-  for (const g of pakietyL) if (g.ponad) uwagi.unshift({ p: { id: "", nazwa: "Pakiet: " + g.pk.nazwa, pom: "" }, zapl: g.zapl, plan: g.plan, pakiet: g });
+  const grupy = new Map();
+  for (const x of w) { const k = pom().some((r) => r.id === x.p.pom) ? x.p.pom : ""; if (!grupy.has(k)) grupy.set(k, []); grupy.get(k).push(x); }
+  const kafle = pom().map((r) => ({ r, s: suma(grupy.get(r.id) || []) }));
+  h += `<div class="sekcja-h"><h2>Pomieszczenia</h2><a class="lnk" href="#ustawienia">Edytuj</a></div><div class="kafle">${kafle.map(({ r, s: g }) => `
+    <a class="kafel" href="#pom/${esc(r.id)}" style="--k:${kolorPom(r.id)}">
+      <span class="kafel-t"><span class="okr-b">${ikonaPom(r.id)}</span><span class="kafel-n">${esc(r.nazwa)}</span></span>
+      <span class="kafel-v">${kw(g.zostalo)}</span>
+      <span class="kafel-s">${g.n ? `zostało z ${zl(g.plan)}` : "brak pozycji"}</span>
+      ${pasek(g.zapl, g.zostalo, g.plan)}
+    </a>`).join("")}</div>`;
+  if (S.pakiety.size) h += `<div class="sekcja-h"><h2>Pakiety</h2></div>${[...S.pakiety.values()].map((g) => `
+    <a class="pakiet" href="#lista/pakiet:${esc(g.pk.id)}"><span class="pakiet-g"><span class="pakiet-n">${esc(g.pk.nazwa)}</span><span class="pakiet-v">${kw(g.zostalo)}</span></span>
+    <span class="pakiet-s">${g.xs.map((x) => esc(x.p.nazwa)).join(", ")}<br>zapłacone ${zl(g.zapl)} z ${zl(g.plan)}</span>${pasek(g.zapl, g.zostalo, g.plan)}</a>`).join("")}`;
   const wyk = new Map();
   for (const pl of platnosci()) if (pl.gdzie && !poz(pl.pozycja)?.zakup) wyk.set(pl.gdzie, (wyk.get(pl.gdzie) || 0) + (pl.kwotaGr || 0));
-  const wykL = [...wyk.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
-  h += `<div class="grid2">
-    <div class="panel"><h2>Wymaga uwagi</h2>${uwagi.length ? `<div class="rows">${uwagi.map((x) => x.pakiet ? `<button class="row" type="button" data-fpak="${esc(x.pakiet.pk.id)}"><span class="n">${esc(x.p.nazwa)}</span><span class="a num">${zl(x.zapl)}</span><span class="m"><span>${x.pakiet.xs.length} pozycji</span><span class="pill bad">ponad plan o ${zl(x.zapl - x.plan)}</span></span></button>` : `<button class="row" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span><span class="a num">${zl(x.zapl)}</span><span class="m"><span>${esc(nazwaPom(x.p.pom))}</span>${pigulka(x)}</span></button>`).join("")}</div><p class="hint" style="margin:8px 0 0">Pozycje ponad planem i płatności spoza planów pozycji. Wszystkie schodzą z budżetu ogólnego.</p>` : `<p class="hint" style="margin:0">Wszystkie płatności mieszczą się w planach pozycji.</p>`}</div>
-    <div class="panel"><h2>Wykonawcy i sklepy</h2>${wykL.length ? `<div class="rows">${wykL.map(([g, k]) => `<button class="row" type="button" data-fgdzie="${esc(g)}"><span class="n">${esc(g)}</span><span class="a num">${zl(k)}</span></button>`).join("")}</div>` : `<p class="hint" style="margin:0">Pojawią się, gdy przy płatnościach wpiszesz sklep albo wykonawcę.</p>`}</div>
-  </div>`;
-  h += `<div class="panel"><h2>Płatności w miesiącach</h2>${wykresMiesieczny()}</div>`;
-  if (sz.n) h += `<div class="panel"><h2>Zakup domu</h2><div class="rows">${zakup().map((x) => `<button class="row" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span><span class="a num">${zl(x.zapl)}</span></button>`).join("")}</div><p class="hint" style="margin:8px 0 0">Razem <strong class="num">${zl(sz.zapl)}</strong>. Nie wlicza się do budżetu wykończenia.</p></div>`;
-  el.innerHTML = h;
+  if (wyk.size) h += `<div class="sekcja-h"><h2>Komu płacisz</h2><a class="lnk" href="#platnosci">Wszystkie</a></div><div class="karta lista-p">${[...wyk.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([g, k]) => `<a class="wk" href="#platnosci/${encodeURIComponent(g)}"><span>${esc(g)}</span><span class="num">${kw(k)}</span></a>`).join("")}</div>`;
+  if (sz.n) h += `<div class="sekcja-h"><h2>Zakup domu</h2></div><div class="karta lista-p">${zakup().map((x) => `<a class="wk" href="#poz/${esc(x.p.id)}"><span>${esc(x.p.nazwa)}</span><span class="num">${kw(x.zapl)}</span></a>`).join("")}<p class="przyp">Razem ${zl(sz.zapl)}. Nie liczy się do wykończenia.</p></div>`;
+  return h;
 }
 
-function wierszPakietu(g) {
-  const pill = g.ponad ? `<span class="pill bad">ponad plan o ${zl(g.zapl - g.plan)}</span>` : g.zostalo ? `<span class="pill mut">zostało ${zl(g.zostalo)}</span>` : `<span class="pill ok">zapłacone</span>`;
-  return `<button class="row" type="button" data-fpak="${esc(g.pk.id)}"><span class="n">${esc(g.pk.nazwa)}</span><span class="a num">${zl(g.zapl)} <span style="color:var(--muted)">/ ${zl(g.plan)}</span></span>
-    ${tasma(g.zapl, g.zostalo, g.plan)}<span class="m"><span>${g.xs.map((x) => esc(x.p.nazwa)).join(", ")}</span>${pill}</span></button>`;
+/* ---------- ekran: pomieszczenie ---------- */
+function ekranPom(id) {
+  const r = pom().find((x) => x.id === id);
+  if (!r) return naglowek("Nie ma takiego pomieszczenia", "#dom");
+  const xs = wykonczenie().filter((x) => x.p.pom === id), s = suma(xs);
+  let h = naglowek(esc(r.nazwa), "#dom");
+  h += `<section class="hero" style="--k:${kolorPom(id)}"><div class="hero-g"><div><p class="hero-l">Do wydania</p><p class="hero-v">${kw(s.zostalo)}</p><p class="hero-s">zapłacone ${zl(s.zapl)} z ${zl(s.plan)}</p></div><span class="okr-b duza">${ikonaPom(id)}</span></div>${pasek(s.zapl, s.zostalo, s.plan)}</section>`;
+  h += `<div class="sekcja-h"><h2>${xs.length ? `Pozycje (${xs.length})` : "Pozycje"}</h2></div>`;
+  h += xs.length ? `<div class="karta lista-poz">${xs.map((x) => wierszPozycji(x)).join("")}</div>` : "";
+  h += `<button class="dodaj-wiersz" type="button" data-nowa-poz="${esc(id)}">${ikona("plus", 20)}<span>Dodaj pozycję w: ${esc(r.nazwa)}</span></button>`;
+  return h;
 }
 
-/* ---------- pozycje ---------- */
-function filtrPoz() {
-  const f = S.fp, q = f.q.trim().toLowerCase();
-  return [...licz().values()].filter((x) =>
-    (!f.pom || (f.pom === "-" ? !pom().some((r) => r.id === x.p.pom) : x.p.pom === f.pom)) &&
-    (!f.kat || (f.kat === "-" ? !kat().some((k) => k.id === x.p.kat) : x.p.kat === f.kat)) &&
-    (!f.pak || x.p.pakiet === f.pak) &&
-    (!f.stan || (f.stan === "otwarte" ? !x.p.zakonczona && x.zostalo > 0 : f.stan === "zakonczone" ? x.p.zakonczona : f.stan === "ponad" ? x.ponad : f.stan === "bezplanu" ? x.bezPlanu : true)) &&
-    (!q || [x.p.nazwa, x.p.notatka, nazwaPom(x.p.pom), nazwaKat(x.p.kat)].join(" ").toLowerCase().includes(q)));
-}
-function wierszPoz(x) {
-  return `<button class="row poz" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span>
-    <span class="a num">${zl(x.zapl)}${x.plan ? ` <span style="color:var(--muted)">/ ${zl(x.plan)}</span>` : ""}</span>
-    ${tasma(x.zapl, x.zostalo, x.plan)}
-    <span class="m"><span>${esc(nazwaKat(x.p.kat))} · ${x.n} ${x.n === 1 ? "płatność" : "płatności"}${x.p.produkty?.length ? ` · ${x.p.produkty.length} prod. za ${zl(x.p.produkty.reduce((a, q) => a + (q.cenaGr || 0), 0))}` : ""}${x.zostalo && !x.p.zakonczona ? ` · zostało ${zl(x.zostalo)}` : ""}</span>${pigulka(x)}</span></button>`;
-}
-function renderPozycje() {
-  const f = S.fp;
-  $("#fp-pom").innerHTML = opcje(pom(), f.pom, "Wszystkie pomieszczenia", "Bez pomieszczenia");
-  $("#fp-kat").innerHTML = opcje(kat(), f.kat, "Wszystkie kategorie", "Bez kategorii");
-  $("#fp-stan").value = f.stan;
-  if ($("#fp-q") !== document.activeElement) $("#fp-q").value = f.q;
-  $("#fp-clear").hidden = !(f.q || f.pom || f.kat || f.stan || f.pak);
-  const el = $("#lista-poz");
-  if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie…</div>`; return; }
-  const l = filtrPoz(), sw = suma(l.filter((x) => !x.p.zakup));
-  $("#fp-sum").innerHTML = `<span>${f.pak ? `Pakiet: ${esc(nazwaPak(f.pak))} · ` : ""}${l.length} z ${pozycje().length} pozycji</span><span>zapłacone <strong class="num">${zl(sw.zapl)}</strong> z planu <strong class="num">${zl(sw.plan)}</strong></span>`;
-  if (!l.length) { el.innerHTML = `<div class="panel empty"><h3>${pozycje().length ? "Nic nie pasuje do filtrów" : "Brak pozycji"}</h3><p>${pozycje().length ? "Zmień filtry albo wyczyść wyszukiwanie." : "Dodaj pierwszą pozycję przyciskiem powyżej."}</p></div>`; return; }
-  const grupy = [];
-  for (const r of pom()) { const xs = l.filter((x) => !x.p.zakup && x.p.pom === r.id); if (xs.length) grupy.push([r.nazwa, xs]); }
-  const sieroty = l.filter((x) => !x.p.zakup && !pom().some((r) => r.id === x.p.pom)); if (sieroty.length) grupy.push(["Bez pomieszczenia", sieroty]);
-  const zk = l.filter((x) => x.p.zakup); if (zk.length) grupy.push(["Zakup domu", zk]);
-  el.innerHTML = grupy.map(([n, xs]) => { const s = suma(xs); return `<div class="month"><div class="month-h"><span class="t">${esc(n)}</span><span class="s num">${zl(s.zapl)}${s.plan ? ` / ${zl(s.plan)}` : ""}</span></div><div class="rows">${xs.map(wierszPoz).join("")}</div></div>`; }).join("");
+/* ---------- ekran: pozycja ---------- */
+function ekranPoz(id) {
+  const x = licz().get(id);
+  if (!x) return naglowek("Nie ma takiej pozycji", "#dom");
+  const p = x.p, wroc = p.zakup ? "#dom" : `#pom/${p.pom}`;
+  const pl = platnosci().filter((q) => q.pozycja === id).sort((a, b) => (b.data || "").localeCompare(a.data || ""));
+  const pr = p.produkty || [], kup = kupioneProdukty(), sumaPr = pr.reduce((a, q) => a + (q.cenaGr || 0), 0);
+  let h = naglowek(esc(p.nazwa), wroc, `<button class="okr" type="button" data-edytuj-poz="${esc(id)}" aria-label="Edytuj pozycję">${ikona("olowek")}</button>`);
+  h += `<section class="hero" style="--k:${p.zakup ? "#E4E4EA" : kolorPom(p.pom)}">
+    <p class="hero-meta">${[p.zakup ? "Zakup domu" : nazwaPom(p.pom), nazwaKat(p.kat)].filter(Boolean).map(esc).join(" · ")}</p>
+    <div class="trio"><div><p class="hero-l">Zapłacone</p><p class="trio-v">${kw(x.zapl)}</p></div><div><p class="hero-l">Plan</p><p class="trio-v">${x.plan ? kw(x.plan) : "—"}</p></div><div><p class="hero-l">Zostało</p><p class="trio-v">${kw(x.zostalo)}</p></div></div>
+    ${pasek(x.zapl, x.zostalo, x.plan)}
+    ${stanPozycji(x) ? `<p class="hero-tag">${stanPozycji(x)}</p>` : ""}
+    ${x.wPakiecie ? (() => { const g = S.pakiety.get(x.wPakiecie.id); return `<p class="hero-s">Pakiet „${esc(g.pk.nazwa)}”: zapłacone ${zl(g.zapl)} z ${zl(g.plan)}, zostało ${zl(g.zostalo)}.</p>`; })() : ""}
+    ${p.notatka ? `<p class="hero-s">${esc(p.notatka)}</p>` : ""}
+  </section>
+  <button class="btn-czarny szeroki" type="button" data-nowa-pl="${esc(id)}">${ikona("plus", 20)} Dodaj płatność</button>`;
+  h += `<div class="sekcja-h"><h2>Płatności${pl.length ? ` (${pl.length})` : ""}</h2></div>`;
+  h += pl.length ? `<div class="karta lista-p">${pl.map((q) => wierszPlatnosci(q, true)).join("")}</div>` : `<p class="pusto">Jeszcze nic nie zapłacono.</p>`;
+  h += `<div class="sekcja-h"><h2>Produkty${pr.length ? ` (${pr.length})` : ""}</h2><button class="lnk" type="button" data-nowy-prod="${esc(id)}">Dodaj</button></div>`;
+  if (pr.length) {
+    h += `<div class="karta">${pr.map((q) => `<div class="prod">
+        <button class="prod-g" type="button" data-prod="${esc(id)}|${esc(q.id)}"><span class="prod-n">${esc(q.nazwa)}</span><span class="prod-m">${esc([q.model, q.sklep].filter(Boolean).join(", "))}</span></button>
+        <span class="prod-c">${kw(q.cenaGr)}</span>
+        <span class="prod-a">${q.link ? `<a class="chip" href="${esc(q.link)}" target="_blank" rel="noopener">Sklep ${ikona("strzalka", 16)}</a>` : ""}${kup.has(q.id) ? `<span class="tag ok">kupione</span>` : `<button class="chip chip-czarny" type="button" data-kup="${esc(id)}|${esc(q.id)}">Kupione</button>`}</span>
+      </div>`).join("")}<p class="przyp">Razem ${zl(sumaPr)}${x.plan ? (sumaPr > x.plan ? `, o ${zl(sumaPr - x.plan)} więcej niż plan` : sumaPr === x.plan ? ", tyle co plan" : `, ${zl(x.plan - sumaPr)} poniżej planu`) : ""}.</p></div>`;
+  } else h += `<p class="pusto">Dodaj konkretne modele z cenami, żeby widzieć, czy mieszczą się w planie.</p>`;
+  return h;
 }
 
-/* ---------- płatności ---------- */
-function filtrPl() {
-  const f = S.fl, q = f.q.trim().toLowerCase();
-  return platnosci().filter((pl) => {
-    const p = poz(pl.pozycja);
-    return (!f.pom || (p && !p.zakup && (f.pom === "-" ? !pom().some((r) => r.id === p.pom) : p.pom === f.pom))) &&
-      (!f.gdzie || pl.gdzie === f.gdzie) &&
-      (!q || [pl.opis, pl.gdzie, pl.notatka, p?.nazwa].join(" ").toLowerCase().includes(q));
-  }).sort((a, b) => (b.data || "").localeCompare(a.data || "") || (b.utworzono || "").localeCompare(a.utworzono || ""));
-}
-function wierszPl(pl) {
-  const p = poz(pl.pozycja);
-  const meta = [p ? (p.zakup ? "Zakup domu" : nazwaPom(p.pom)) : "Bez pozycji", pl.gdzie].filter(Boolean).map(esc).join(" · ");
-  return `<button class="wyd" type="button" data-pl="${esc(pl.id)}"><span class="dt num">${dataPL(pl.data)}</span>
-    <span class="o"><span class="t">${esc(pl.opis || p?.nazwa || "(bez opisu)")}</span><span class="mm"><span>${pl.opis && p ? esc(p.nazwa) + " · " : ""}${meta}</span>${pl.pliki?.length ? `<span title="Załączniki">📎 ${pl.pliki.length}</span>` : ""}</span></span>
-    <span class="k num">${zl2(pl.kwotaGr)}</span></button>`;
-}
-function renderPlatnosci() {
+/* ---------- ekran: lista pozycji ---------- */
+const STANY = [["", "Wszystkie"], ["otwarte", "Do zapłaty"], ["uwaga", "Poza planem"], ["zakonczone", "Zakończone"]];
+function ekranLista() {
   const f = S.fl;
-  $("#fl-pom").innerHTML = opcje(pom(), f.pom, "Wszystkie pomieszczenia", "Bez pomieszczenia");
-  $("#fl-gdzie").innerHTML = `<option value="">Wszyscy wykonawcy i sklepy</option>` + wykonawcy().map((g) => `<option ${g === f.gdzie ? "selected" : ""}>${esc(g)}</option>`).join("");
-  if ($("#fl-q") !== document.activeElement) $("#fl-q").value = f.q;
-  $("#fl-clear").hidden = !(f.q || f.pom || f.gdzie);
-  const el = $("#lista-pl");
-  if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie…</div>`; return; }
-  const l = filtrPl(), razem = l.reduce((a, p) => a + (p.kwotaGr || 0), 0);
-  $("#fl-sum").innerHTML = `<span>${l.length} z ${platnosci().length} płatności</span><span>razem <strong class="num">${zl2(razem)}</strong></span>`;
-  if (!l.length) { el.innerHTML = `<div class="panel empty"><h3>${platnosci().length ? "Nic nie pasuje do filtrów" : "Brak płatności"}</h3><p>${platnosci().length ? "Zmień filtry albo wyczyść wyszukiwanie." : "Dodaj płatność przyciskiem na dole."}</p></div>`; return; }
-  const g = new Map();
-  for (const pl of l) { const k = pl.data ? pl.data.slice(0, 7) : "brak"; if (!g.has(k)) g.set(k, []); g.get(k).push(pl); }
-  el.innerHTML = [...g.entries()].map(([k, ps]) => {
-    const t = k === "brak" ? "Bez daty · przeniesione z arkusza" : `${MIES[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
-    return `<div class="month"><div class="month-h"><span class="t">${t}</span><span class="s num">${zl2(ps.reduce((a, p) => a + (p.kwotaGr || 0), 0))}</span></div>${ps.map(wierszPl).join("")}</div>`;
-  }).join("");
+  return `${naglowek("Wszystkie pozycje")}
+  <label class="szukaj">${ikona("szukaj", 20)}<input id="fl-q" type="search" placeholder="Szukaj pozycji" value="${esc(f.q)}" autocomplete="off"></label>
+  <div class="chipy" role="group" aria-label="Stan">${STANY.map(([v, n]) => `<button class="chip ${f.stan === v ? "on" : ""}" type="button" data-fl-stan="${v}">${n}</button>`).join("")}</div>
+  <div class="chipy" role="group" aria-label="Pomieszczenie"><button class="chip ${!f.pom ? "on" : ""}" type="button" data-fl-pom="">Wszędzie</button>${pom().map((r) => `<button class="chip ${f.pom === r.id ? "on" : ""}" type="button" data-fl-pom="${esc(r.id)}"><span class="kropka" style="background:${kolorPom(r.id)}"></span>${esc(r.nazwa)}</button>`).join("")}</div>
+  <div id="wyniki"></div>`;
+}
+function wynikiListy() {
+  const f = S.fl, q = f.q.trim().toLowerCase();
+  const pakF = f.stan.startsWith("pakiet:") ? f.stan.slice(7) : "";
+  const l = [...licz().values()].sort((a, b) => (a.p.zakup ? 1 : 0) - (b.p.zakup ? 1 : 0)).filter((x) =>
+    (!f.pom || x.p.pom === f.pom) &&
+    (pakF ? x.p.pakiet === pakF : !f.stan || (f.stan === "otwarte" ? x.zostalo > 0 : f.stan === "uwaga" ? x.ponad || (x.bezPlanu && x.zapl) || S.pakiety.get(x.p.pakiet)?.ponad : f.stan === "zakonczone" ? x.p.zakonczona : true)) &&
+    (!q || [x.p.nazwa, x.p.notatka, nazwaPom(x.p.pom), nazwaKat(x.p.kat), ...(x.p.produkty || []).map((p) => p.nazwa + " " + p.model)].join(" ").toLowerCase().includes(q)));
+  const s = suma(l.filter((x) => !x.p.zakup));
+  if (!l.length) return `<p class="pusto">Nic tu nie pasuje. Zmień filtry albo wyszukiwanie.</p>`;
+  return `<p class="podsum">${pakF ? `Pakiet ${esc(nazwaPak(pakF))}: ` : ""}${l.length} poz., zapłacone ${zl(s.zapl)} z ${zl(s.plan)}</p><div class="karta lista-poz">${l.map((x) => wierszPozycji(x, true)).join("")}</div>`;
 }
 
-/* ---------- ustawienia ---------- */
-function renderUstawienia(force) {
-  const el = $("#v-ustawienia");
-  if (!force && el.contains(document.activeElement) && document.activeElement.matches("input[type=text],input:not([type])")) return;
-  if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie…</div>`; return; }
+/* ---------- ekran: płatności ---------- */
+function ekranPlatnosci() {
+  const g = S.fp.gdzie;
+  return `${naglowek("Płatności")}
+  <div class="chipy" role="group" aria-label="Wykonawca lub sklep"><button class="chip ${!g ? "on" : ""}" type="button" data-fp-gdzie="">Wszyscy</button>${wykonawcy().map((w) => `<button class="chip ${g === w ? "on" : ""}" type="button" data-fp-gdzie="${esc(w)}">${esc(w)}</button>`).join("")}</div>
+  <div id="wyniki"></div>`;
+}
+function wynikiPlatnosci() {
+  const g = S.fp.gdzie;
+  const l = platnosci().filter((pl) => !poz(pl.pozycja)?.zakup && (!g || pl.gdzie === g)).sort((a, b) => (b.data || "").localeCompare(a.data || "") || (b.utworzono || "").localeCompare(a.utworzono || ""));
+  if (!l.length) return `<p class="pusto">Brak płatności. Dodaj pierwszą przyciskiem plus.</p>`;
+  const razem = l.reduce((a, p) => a + (p.kwotaGr || 0), 0);
+  const grupy = new Map();
+  for (const pl of l) { const k = pl.data ? pl.data.slice(0, 7) : "brak"; if (!grupy.has(k)) grupy.set(k, []); grupy.get(k).push(pl); }
+  let h = `<section class="hero hero-plaski"><p class="hero-l">${g ? esc(g) : "Wykończenie razem"}</p><p class="hero-v">${kw(razem)}</p><p class="hero-s">${l.length} płatności, bez zakupu domu</p></section>`;
+  for (const [k, ps] of grupy) {
+    const t = k === "brak" ? "Przeniesione z arkusza" : `${MIES[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
+    h += `<div class="sekcja-h"><h2>${t.charAt(0).toUpperCase() + t.slice(1)}</h2><span class="num szary">${zl(ps.reduce((a, p) => a + (p.kwotaGr || 0), 0))}</span></div><div class="karta lista-p">${ps.map((pl) => wierszPlatnosci(pl)).join("")}</div>`;
+  }
+  return h;
+}
+
+/* ---------- ekran: ustawienia ---------- */
+function ekranUstawienia() {
   const ile = (typ, id) => pozycje().filter((p) => p[SLOWNIK[typ].pole] === id).length;
   const ask = (typ, id) => {
     if (S.usuwanie?.typ !== typ || S.usuwanie.id !== id) return "";
-    const n = ile(typ, id), lista = slownik(typ);
-    if (!n || typ === "pak") return typ === "pak" && n ? `<div class="ask">Usunąć pakiet? ${n} pozycji zostanie bez pakietu (nic nie znika). <button class="btn danger" type="button" data-del-ok>Usuń</button><button class="btn" type="button" data-del-no>Nie</button></div>` : `<div class="ask">Usunąć? <button class="btn danger" type="button" data-del-ok>Usuń</button><button class="btn" type="button" data-del-no>Nie</button></div>`;
-    return `<div class="ask">${n} pozycji ma tę wartość. Przenieś je do: <select class="ctl" id="u-move">${opcje(lista.filter((x) => x.id !== id), "")}</select><button class="btn danger" type="button" data-del-ok>Przenieś i usuń</button><button class="btn" type="button" data-del-no>Anuluj</button></div>`;
+    const n = ile(typ, id);
+    if (typ === "pak" || !n) return `<div class="ask">${n ? `${n} pozycji zostanie bez pakietu. ` : ""}Usunąć? <button class="chip chip-zle" type="button" data-del-ok>Usuń</button><button class="chip" type="button" data-del-no>Nie</button></div>`;
+    return `<div class="ask">${n} pozycji ma tę wartość. Przenieś je do: <select class="pole" id="u-move">${slownik(typ).filter((x) => x.id !== id).map((x) => `<option value="${esc(x.id)}">${esc(x.nazwa)}</option>`).join("")}</select><button class="chip chip-zle" type="button" data-del-ok>Przenieś i usuń</button><button class="chip" type="button" data-del-no>Anuluj</button></div>`;
   };
-  const lista = (typ, items) => `<div class="slist">${items.map((x) => `<div class="srow k">
-      <input class="ctl" type="text" value="${esc(x.nazwa)}" data-u="${typ}" data-id="${esc(x.id)}" aria-label="Nazwa">
-      <button class="btn link" type="button" data-u-del="${typ}" data-id="${esc(x.id)}">usuń <span class="cnt">(${ile(typ, x.id)})</span></button>
-      ${ask(typ, x.id)}</div>`).join("")}</div>`;
-  el.innerHTML = `
-  <div class="grid2">
-    <div class="panel stack"><div><h2>Pomieszczenia</h2><p class="hint" style="margin:0">Budżet pomieszczenia to suma planów jego pozycji. Rzeczy na cały dom (podłogi, drzwi, elektryka) trzymaj w „Cały dom”.</p></div>
-      ${lista("pom", pom())}
-      <form class="srow k" id="u-add-pom"><input class="ctl" type="text" placeholder="Nowe pomieszczenie" aria-label="Nowe pomieszczenie"><button class="btn" type="submit">Dodaj</button></form></div>
-    <div class="panel stack"><div><h2>Kategorie</h2><p class="hint" style="margin:0">Rodzaj prac lub zakupów. Pozwala zobaczyć np. ile łącznie idzie na meble we wszystkich pomieszczeniach.</p></div>
-      ${lista("kat", kat())}
-      <form class="srow k" id="u-add-kat"><input class="ctl" type="text" placeholder="Nowa kategoria" aria-label="Nowa kategoria"><button class="btn" type="submit">Dodaj</button></form></div>
-  </div>
-  <div class="panel stack"><div><h2>Pakiety</h2><p class="hint" style="margin:0">Kilka pozycji ze wspólnym budżetem, np. wykonawca robiący kilka prac z materiałami. Pozycję dopinasz do pakietu w jej formularzu.</p></div>
-    ${lista("pak", pak())}
-    <form class="srow k" id="u-add-pak"><input class="ctl" type="text" placeholder="Nowy pakiet" aria-label="Nowy pakiet"><button class="btn" type="submit">Dodaj</button></form></div>
-  <div class="panel stack">
-    <div><h2>Kopia i historia</h2><p class="hint" style="margin:0">Baza trzyma kopię 300 ostatnich wersji danych, więc pomyłkę da się cofnąć (poproś Claude’a). Pliki CSV otworzysz w Excelu i Google Sheets. Aplikacja działa od razu na każdym urządzeniu, wystarczy otworzyć adres strony.</p></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="u-csv-poz">CSV: pozycje</button><button class="btn" type="button" id="u-csv-pl">CSV: płatności</button></div>
-  </div>`;
-}
-function pobierzCsv(nazwa, rows) {
-  const q = (v) => { v = String(v ?? ""); return /[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
-  const kw = (gr) => f2.format((gr || 0) / 100).replace(/\s/g, "");
-  const tekst = "﻿" + rows.map((r) => r.map((c) => q(typeof c === "object" && c ? kw(c.gr) : c)).join(";")).join("\r\n");
-  const url = URL.createObjectURL(new Blob([tekst], { type: "text/csv;charset=utf-8" }));
-  const a = document.createElement("a"); a.href = url; a.download = `${nazwa}-${dzis()}.csv`;
-  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
-function csvPozycje() {
-  const rows = [["Pomieszczenie", "Pozycja", "Kategoria", "Plan", "Zapłacone", "Zostało", "Zakończona", "Zakup domu", "Pakiet", "Produkty", "Notatka"]];
-  for (const x of licz().values()) rows.push([nazwaPom(x.p.pom), x.p.nazwa, nazwaKat(x.p.kat), { gr: x.plan }, { gr: x.zapl }, { gr: x.zostalo }, x.p.zakonczona ? "tak" : "", x.p.zakup ? "tak" : "", nazwaPak(x.p.pakiet), (x.p.produkty || []).map((q) => `${q.nazwa} ${q.model || ""} ${f2.format(q.cenaGr / 100)} zł`.replace(/\s+/g, " ")).join(" | "), x.p.notatka]);
-  pobierzCsv("koszty-pozycje", rows);
-}
-function csvPlatnosci() {
-  const rows = [["Data", "Pozycja", "Pomieszczenie", "Opis", "Sklep / wykonawca", "Kwota", "Notatka"]];
-  for (const pl of [...platnosci()].sort((a, b) => (a.data || "").localeCompare(b.data || ""))) { const p = poz(pl.pozycja); rows.push([pl.data, p?.nazwa, p ? nazwaPom(p.pom) : "", pl.opis, pl.gdzie, { gr: pl.kwotaGr }, pl.notatka]); }
-  pobierzCsv("koszty-platnosci", rows);
+  const lista = (typ, tytul, opis) => `<div class="sekcja-h"><h2>${tytul}</h2></div><div class="karta ust">${opis ? `<p class="przyp">${opis}</p>` : ""}${slownik(typ).map((x) => `<div class="ust-w">
+      ${typ === "pom" ? `<button class="kolor" type="button" data-kolor="${esc(x.id)}" style="background:${kolorPom(x.id)}" aria-label="Zmień kolor: ${esc(x.nazwa)}"></button>` : ""}
+      <input class="pole" type="text" value="${esc(x.nazwa)}" data-u="${typ}" data-id="${esc(x.id)}" aria-label="Nazwa">
+      <button class="okr maly" type="button" data-u-del="${typ}" data-id="${esc(x.id)}" aria-label="Usuń ${esc(x.nazwa)}">${ikona("x", 18)}</button>
+      ${ask(typ, x.id)}</div>`).join("")}
+    <form class="ust-w" data-dodaj="${typ}"><input class="pole" type="text" placeholder="Dodaj: ${SLOWNIK[typ].nazwa}" aria-label="Nowe: ${SLOWNIK[typ].nazwa}"><button class="okr maly czarny" type="submit" aria-label="Dodaj">${ikona("plus", 18)}</button></form></div>`;
+  const b = S.dane.ustawienia.budzetGr || 0;
+  return `${naglowek("Ustawienia")}
+  <button class="mini mini-y szeroki" type="button" data-budzet><p class="mini-l">Budżet wykończenia</p><p class="mini-v">${b ? kw(b) : "Wpisz kwotę"}</p><p class="mini-s">ile masz pieniędzy na wykończenie</p></button>
+  ${lista("pom", "Pomieszczenia", "Kliknij kółko, żeby zmienić kolor.")}
+  ${lista("kat", "Kategorie")}
+  ${lista("pak", "Pakiety", "Kilka pozycji ze wspólnym budżetem, np. wykonawca z materiałami. Pozycję dopinasz w jej edycji.")}
+  <div class="sekcja-h"><h2>Kopia danych</h2></div>
+  <div class="karta"><p class="przyp">Baza trzyma 300 poprzednich wersji, więc każdą pomyłkę da się cofnąć. Pliki CSV otworzysz w Excelu i Arkuszach Google.</p><div class="rzad"><button class="chip" type="button" id="u-csv-poz">CSV pozycji</button><button class="chip" type="button" id="u-csv-pl">CSV płatności</button></div></div>`;
 }
 
-/* ---------- arkusz: pozycja ---------- */
-function otworzPoz(id) {
-  const p = id ? poz(id) : null;
-  S.sheet = { typ: "poz", id: p?.id || null };
-  const x = p ? licz().get(p.id) : null;
-  const pl = p ? platnosci().filter((q) => q.pozycja === p.id).sort((a, b) => (b.data || "").localeCompare(a.data || "")) : [];
-  const domPom = S.fp.pom && S.fp.pom !== "-" ? S.fp.pom : pom()[0]?.id || "";
-  $("#sheet").innerHTML = `<div class="tapebar" aria-hidden="true"></div><form class="sheet-in" id="form-poz" novalidate>
-    <h2 id="sheet-h">${p ? "Pozycja" : "Nowa pozycja"}</h2>
-    <div class="fg"><label for="p-nazwa">Nazwa</label><input class="ctl" id="p-nazwa" value="${esc(p?.nazwa || "")}" placeholder="np. Meble kuchnia" autocomplete="off"></div>
-    <div class="two">
-      <div class="fg"><label for="p-pom">Pomieszczenie</label><select class="ctl" id="p-pom">${opcje(pom(), p ? p.pom : domPom, "— wybierz —")}</select></div>
-      <div class="fg"><label for="p-kat">Kategoria</label><select class="ctl" id="p-kat">${opcje(kat(), p ? p.kat : S.fp.kat !== "-" ? S.fp.kat : "", "— wybierz —")}</select></div>
-    </div>
-    <div class="two">
-      <div class="fg"><label for="p-plan">Plan (zł)</label><input class="ctl kw" id="p-plan" inputmode="decimal" value="${p?.planGr ? f0.format(p.planGr / 100) : ""}" placeholder="ile planujesz wydać"></div>
-      <div class="fg checks"><label><input type="checkbox" id="p-zak" ${p?.zakonczona ? "checked" : ""}> Zakończone, nic więcej nie płacę</label><label><input type="checkbox" id="p-zakup" ${p?.zakup ? "checked" : ""}> Zakup domu (poza budżetem wykończenia)</label></div>
-    </div>
-    ${pak().length ? `<div class="fg"><label for="p-pak">Pakiet <span class="hint">(wspólny budżet z innymi pozycjami)</span></label><select class="ctl" id="p-pak">${opcje(pak(), p ? p.pakiet || "" : S.fp.pak || "", "— bez pakietu —")}</select></div>` : ""}
-    <div class="fg"><label for="p-notatka">Notatka</label><textarea class="ctl" id="p-notatka" rows="2" placeholder="zakres, ustalenia z wykonawcą…">${esc(p?.notatka || "")}</textarea></div>
-    ${p ? `<div class="pozsum"><div><span class="lbl">Zapłacone</span><b class="num">${zl2(x.zapl)}</b></div><div><span class="lbl">Plan</span><b class="num">${x.plan ? zl2(x.plan) : "—"}</b></div><div><span class="lbl">Zostało</span><b class="num">${zl2(x.zostalo)}</b></div></div>${tasma(x.zapl, x.zostalo, x.plan)}
-      ${x.wPakiecie ? (() => { const g = S.pakiety.get(x.wPakiecie.id); return `<p class="hint" style="margin:0">W pakiecie „${esc(g.pk.nazwa)}”: plan ${zl(g.plan)}, zapłacone ${zl(g.zapl)}, zostało ${zl(g.zostalo)}. „Zostało” tej pozycji to jej część kwoty pakietu.</p>`; })() : ""}
-      <div class="fg"><div class="pl-head"><span class="lbl">Płatności (${pl.length})</span><button class="btn" type="button" data-nowa-pl="${esc(p.id)}">+ Dodaj płatność</button></div>
-      ${pl.length ? `<div>${pl.map(wierszPl).join("")}</div>` : `<p class="hint" style="margin:0">Brak płatności.</p>`}</div>
-      ${sekcjaProduktow(p)}` : ""}
-    <div class="err" id="p-err" hidden></div>
-    <div class="actions"><div>${p ? `<button class="btn danger" type="button" id="p-del">Usuń pozycję</button>` : ""}</div>
-      <div class="r"><button class="btn" type="button" data-zamknij>Anuluj</button><button class="btn pri" type="submit">Zapisz</button></div></div>
-  </form>`;
-  pokazSheet(p ? null : "#p-nazwa");
+/* ---------- arkusze (formularze od dołu) ---------- */
+function pokazArkusz(html, fokus) {
+  $("#arkusz").innerHTML = `<div class="uchwyt" aria-hidden="true"></div>${html}`;
+  $("#zaslona").hidden = false; document.body.classList.add("blok");
+  if (!history.state?.ov) history.pushState({ ov: 1 }, "", location.href);
+  if (fokus) setTimeout(() => $(fokus)?.focus(), 60);
 }
-/* ---------- produkty (konkretne modele w pozycji) ---------- */
-const kupioneProdukty = () => new Set(platnosci().filter((q) => q.produkt).map((q) => q.produkt));
-function sekcjaProduktow(p) {
-  const pr = p.produkty || [], razem = pr.reduce((a, x) => a + (x.cenaGr || 0), 0), kup = kupioneProdukty();
-  const roznica = razem - (p.planGr || 0);
-  return `<div class="fg"><div class="pl-head"><span class="lbl">Wybrane produkty (${pr.length})${pr.length ? ` · razem ${zl(razem)}` : ""}</span><button class="btn" type="button" data-nowy-prod="${esc(p.id)}">+ Produkt</button></div>
-    ${pr.length && p.planGr ? `<p class="hint" style="margin:0">${roznica > 0 ? `<span style="color:var(--bad)">O ${zl(roznica)} więcej niż plan pozycji (${zl(p.planGr)}).</span>` : `Mieści się w planie pozycji, zapas ${zl(-roznica)}.`}</p>` : ""}
-    ${pr.length ? `<div>${pr.map((x) => `<div class="prod">
-        <button class="prod-n" type="button" data-prod="${esc(p.id)}|${esc(x.id)}"><span class="t">${esc(x.nazwa)}</span><span class="mm">${esc([x.model, x.sklep].filter(Boolean).join(" · "))}${x.notatka ? ` · <span style="color:var(--warn)">${esc(x.notatka)}</span>` : ""}</span></button>
-        <span class="num">${zl(x.cenaGr)}</span>
-        <span class="prod-a">${x.link ? `<a class="btn link" href="${esc(x.link)}" target="_blank" rel="noopener">sklep</a>` : ""}${kup.has(x.id) ? `<span class="pill ok">kupione</span>` : `<button class="btn" type="button" data-kup="${esc(p.id)}|${esc(x.id)}">Kupione</button>`}</span>
-      </div>`).join("")}</div>` : `<p class="hint" style="margin:0">Dodaj konkretne modele z cenami, żeby widzieć, czy mieszczą się w planie.</p>`}</div>`;
+function ukryjArkusz() {
+  const e = S.sheet;
+  if (e?.typ === "pl" && e.nowe?.length && !e.zapisano) for (const p of e.nowe) usunPlik(p);
+  S.sheet = null; $("#zaslona").hidden = true; $("#arkusz").innerHTML = ""; document.body.classList.remove("blok");
 }
-function otworzProd(pozId, prodId) {
-  const p = poz(pozId), x = (p?.produkty || []).find((q) => q.id === prodId);
-  S.sheet = { typ: "prod", pozId, id: x?.id || null };
-  $("#sheet").innerHTML = `<div class="tapebar" aria-hidden="true"></div><form class="sheet-in" id="form-prod" novalidate>
-    <h2 id="sheet-h">${x ? "Produkt" : "Nowy produkt"} <span class="hint">· ${esc(p?.nazwa || "")}</span></h2>
-    <div class="fg"><label for="pr-nazwa">Nazwa</label><input class="ctl" id="pr-nazwa" value="${esc(x?.nazwa || "")}" placeholder="np. Piekarnik Bosch Serie 2" autocomplete="off"></div>
-    <div class="two">
-      <div class="fg"><label for="pr-model">Model</label><input class="ctl" id="pr-model" value="${esc(x?.model || "")}" placeholder="np. HQG572EB4" autocomplete="off"></div>
-      <div class="fg"><label for="pr-cena">Cena (zł)</label><input class="ctl kw" id="pr-cena" inputmode="decimal" value="${x ? f2.format(x.cenaGr / 100) : ""}" placeholder="0,00"></div>
-    </div>
-    <div class="two">
-      <div class="fg"><label for="pr-sklep">Sklep</label><input class="ctl" id="pr-sklep" value="${esc(x?.sklep || "")}" placeholder="np. RTV Euro AGD" autocomplete="off"></div>
-      <div class="fg"><label for="pr-link">Link</label><input class="ctl" id="pr-link" type="url" value="${esc(x?.link || "")}" placeholder="https://…" autocomplete="off"></div>
-    </div>
-    <div class="fg"><label for="pr-notatka">Notatka</label><input class="ctl" id="pr-notatka" value="${esc(x?.notatka || "")}" autocomplete="off"></div>
-    <div class="err" id="pr-err" hidden></div>
-    <div class="actions"><div>${x ? `<button class="btn danger" type="button" id="pr-del">Usuń produkt</button>` : ""}</div>
-      <div class="r"><button class="btn" type="button" data-zamknij>Anuluj</button><button class="btn pri" type="submit">Zapisz</button></div></div>
-  </form>`;
-  pokazSheet(x ? null : "#pr-nazwa");
-}
-async function zapiszProd() {
-  const e = S.sheet, nazwa = $("#pr-nazwa").value.trim(), cena = parseKwota($("#pr-cena").value);
-  const link = $("#pr-link").value.trim();
-  const blad = !nazwa ? "Wpisz nazwę produktu." : cena === null || cena <= 0 ? "Wpisz cenę, np. 3449." : link && !/^https?:\/\//i.test(link) ? "Link musi zaczynać się od https://" : "";
-  if (blad) { const er = $("#pr-err"); er.textContent = blad; er.hidden = false; return; }
-  const id = e.id || losoweId();
-  const dane = { id, nazwa, model: $("#pr-model").value.trim(), cenaGr: cena, sklep: $("#pr-sklep").value.trim(), link, notatka: $("#pr-notatka").value.trim() };
-  try {
-    await zmien(`Produkt: ${nazwa}, ${zl2(cena)} (${poz(e.pozId)?.nazwa || ""})`, (d) => {
-      const p = d.pozycje.find((q) => q.id === e.pozId); if (!p) return;
-      p.produkty ??= [];
-      const i = p.produkty.findIndex((q) => q.id === id);
-      if (i >= 0) p.produkty[i] = dane; else p.produkty.push(dane);
-    });
-    toast(`Zapisano produkt: ${nazwa}`); otworzPoz(e.pozId);
-  } catch (err) { bladZapisu(err); }
-}
-async function usunProd() {
-  const e = S.sheet, b = $("#pr-del");
-  if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Na pewno usunąć?"; return; }
-  try {
-    await zmien(`Usunięto produkt z pozycji ${poz(e.pozId)?.nazwa || ""}`, (d) => {
-      const p = d.pozycje.find((q) => q.id === e.pozId); if (p) p.produkty = (p.produkty || []).filter((q) => q.id !== e.id);
-    });
-    otworzPoz(e.pozId);
-  } catch (err) { bladZapisu(err); }
-}
-function kupProdukt(pozId, prodId) {
-  const x = (poz(pozId)?.produkty || []).find((q) => q.id === prodId); if (!x) return;
-  otworzPl(null, pozId, pozId);
-  S.sheet.produkt = prodId;
-  $("#pl-kwota").value = f2.format(x.cenaGr / 100);
-  $("#pl-opis").value = [x.nazwa, x.model].filter(Boolean).join(" ");
-  if (x.sklep) $("#pl-gdzie").value = x.sklep;
-  $("#sheet-h").textContent = "Płatność za produkt";
-}
+function zamknijArkusz() { ukryjArkusz(); if (history.state?.ov) { S.cichyPop = true; history.back(); } }
+const chipyWyboru = (nazwa, lista, wybrany, kolory) => `<div class="chipy" role="radiogroup">${lista.map((x) => `<button class="chip ${x.id === wybrany ? "on" : ""}" type="button" role="radio" aria-checked="${x.id === wybrany}" data-wybor="${nazwa}" data-v="${esc(x.id)}">${kolory ? `<span class="kropka" style="background:${kolorPom(x.id)}"></span>` : ""}${esc(x.nazwa)}</button>`).join("")}</div>`;
+const wybrane = (nazwa) => $(`#arkusz [data-wybor="${nazwa}"].on`)?.dataset.v || "";
 
-async function zapiszPoz() {
-  const id = S.sheet.id || losoweId();
-  const nazwa = $("#p-nazwa").value.trim(), planTxt = $("#p-plan").value.trim();
-  const plan = planTxt ? parseKwota(planTxt) : 0;
-  const blad = !nazwa ? "Wpisz nazwę pozycji." : plan === null || plan < 0 ? "Plan wpisz jako liczbę, np. 45000." : !$("#p-pom").value ? "Wybierz pomieszczenie." : !$("#p-kat").value ? "Wybierz kategorię." : "";
-  if (blad) { const e = $("#p-err"); e.textContent = blad; e.hidden = false; return; }
-  const dane = { nazwa, pom: $("#p-pom").value, kat: $("#p-kat").value, planGr: plan || 0, zakonczona: $("#p-zak").checked, zakup: $("#p-zakup").checked, pakiet: $("#p-pak")?.value || "", notatka: $("#p-notatka").value.trim() };
+function arkuszNowejPozycji(pomId) {
+  S.sheet = { typ: "nowa-poz" };
+  const p0 = pomId || S.ostatnie.pom || pom()[0]?.id;
+  setTimeout(() => { for (const b of document.querySelectorAll("#arkusz [data-wybor].on")) b.scrollIntoView({ block: "nearest", inline: "center" }); }, 80);
+  pokazArkusz(`<form id="f-nowa-poz" class="ark" novalidate>
+    <h2>Nowa pozycja</h2>
+    <label class="pole-l" for="np-nazwa">Co to jest?</label><input class="pole duze" id="np-nazwa" placeholder="np. Lampy nad wyspą" autocomplete="off" enterkeyhint="next">
+    <label class="pole-l" for="np-plan">Plan, ile chcesz wydać <span class="szary">(można później)</span></label><input class="pole" id="np-plan" inputmode="decimal" placeholder="0 zł" autocomplete="off" enterkeyhint="done">
+    <p class="pole-l">Pomieszczenie</p>${chipyWyboru("pom", pom(), p0, true)}
+    <p class="pole-l">Kategoria <span class="szary">(opcjonalnie)</span></p>${chipyWyboru("kat", kat(), S.ostatnie.kat || "")}
+    <p class="blad" id="np-blad" hidden></p>
+    <div class="ark-akcje"><button class="btn-jasny" type="button" id="np-kolejna">Dodaj i następna</button><button class="btn-czarny" type="submit">Dodaj</button></div>
+  </form>`, "#np-nazwa");
+}
+async function zapiszNowaPozycje(kolejna) {
+  const nazwa = $("#np-nazwa").value.trim(), t = $("#np-plan").value.trim(), plan = t ? parseKwota(t) : 0, pomId = wybrane("pom"), katId = wybrane("kat");
+  const blad = !nazwa ? "Wpisz, co to jest." : plan === null || plan < 0 ? "Plan wpisz liczbą, np. 3500." : !pomId ? "Wybierz pomieszczenie." : "";
+  if (blad) { const e = $("#np-blad"); e.textContent = blad; e.hidden = false; return; }
+  const id = losoweId();
   try {
-    await zmien(`${S.sheet.id ? "Pozycja" : "Nowa pozycja"}: ${nazwa}`, (d) => {
-      const p = d.pozycje.find((q) => q.id === id);
-      if (p) Object.assign(p, dane); else d.pozycje.push({ id, ...dane });
-    });
-    zamknij(); toast(`Zapisano pozycję: ${nazwa}`);
+    await zmien(`Nowa pozycja: ${nazwa} (${nazwaPom(pomId)})`, (d) => { d.pozycje.push({ id, nazwa, pom: pomId, kat: katId, planGr: plan || 0, zakonczona: false, zakup: false, notatka: "" }); });
+    S.ostatnie = { ...S.ostatnie, pom: pomId, kat: katId };
+    toast(`Dodano: ${nazwa}`);
+    if (kolejna) { $("#np-nazwa").value = ""; $("#np-plan").value = ""; $("#np-nazwa").focus(); }
+    else zamknijArkusz();
   } catch (e) { bladZapisu(e); }
 }
-async function usunPoz() {
-  const id = S.sheet.id, b = $("#p-del"), n = platnosci().filter((q) => q.pozycja === id).length;
-  if (n) { const e = $("#p-err"); e.textContent = `Ta pozycja ma ${n} płatności. Najpierw je usuń albo przepnij do innej pozycji.`; e.hidden = false; return; }
-  if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Na pewno usunąć?"; return; }
-  try { await zmien(`Usunięto pozycję: ${poz(id)?.nazwa}`, (d) => { d.pozycje = d.pozycje.filter((q) => q.id !== id); }); zamknij(); toast("Usunięto pozycję."); }
-  catch (e) { bladZapisu(e); }
-}
 
-/* ---------- arkusz: płatność ---------- */
-function otworzPl(id, pozId, powrot) {
+function opcjePozycji(wyb) {
+  const o = (p) => `<option value="${esc(p.id)}" ${p.id === wyb ? "selected" : ""}>${esc(p.nazwa)}</option>`;
+  let h = `<option value="">Wybierz pozycję</option>`;
+  for (const r of pom()) { const ps = pozycje().filter((p) => !p.zakup && p.pom === r.id); if (ps.length) h += `<optgroup label="${esc(r.nazwa)}">${ps.map(o).join("")}</optgroup>`; }
+  const zk = pozycje().filter((p) => p.zakup); if (zk.length) h += `<optgroup label="Zakup domu">${zk.map(o).join("")}</optgroup>`;
+  return h;
+}
+function arkuszPlatnosci(id, pozId, prod) {
   const pl = id ? platnosci().find((q) => q.id === id) : null;
-  S.sheet = { typ: "pl", id: pl?.id || null, pliki: [...(pl?.pliki || [])], nowe: [], wgrywa: false, powrot: powrot || null };
-  const wyb = pl?.pozycja || pozId || S.ostatniaPoz || "";
-  $("#sheet").innerHTML = `<div class="tapebar" aria-hidden="true"></div><form class="sheet-in" id="form-pl" novalidate>
-    <h2 id="sheet-h">${pl ? "Płatność" : "Nowa płatność"}</h2>
-    <div class="fg"><label for="pl-poz">Pozycja</label><select class="ctl" id="pl-poz">${opcjePoz(wyb)}</select></div>
-    <div class="two">
-      <div class="fg"><label for="pl-kwota">Kwota (zł)</label><input class="ctl kw" id="pl-kwota" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${pl ? f2.format(pl.kwotaGr / 100) : ""}"></div>
-      <div class="fg"><label for="pl-data">Data</label><input class="ctl" id="pl-data" type="date" value="${pl ? pl.data || "" : dzis()}"></div>
-    </div>
-    <div class="fg"><label for="pl-opis">Za co <span class="hint">(opcjonalnie)</span></label><input class="ctl" id="pl-opis" autocomplete="off" placeholder="np. zaliczka, fuga i klej, II rata" value="${esc(pl?.opis || "")}"></div>
-    <div class="fg"><label for="pl-gdzie">Sklep / wykonawca</label><input class="ctl" id="pl-gdzie" list="dl-gdzie" autocomplete="off" placeholder="np. Kazik, Leroy Merlin" value="${esc(pl?.gdzie || "")}"><datalist id="dl-gdzie">${wykonawcy().map((g) => `<option value="${esc(g)}">`).join("")}</datalist></div>
-    <div class="fg"><label for="pl-notatka">Notatka</label><textarea class="ctl" id="pl-notatka" rows="2" placeholder="nr faktury, gwarancja…">${esc(pl?.notatka || "")}</textarea></div>
-    <div class="fg"><span class="lbl">Paragony i faktury</span><div class="files" id="pl-files"></div><input type="file" id="pl-file" accept="image/*,application/pdf" multiple hidden></div>
-    <div class="err" id="pl-err" hidden></div>
-    <div class="actions"><div>${pl ? `<button class="btn danger" type="button" id="pl-del">Usuń</button>` : ""}</div>
-      <div class="r"><button class="btn" type="button" data-zamknij>Anuluj</button>${pl ? "" : `<button class="btn" type="button" id="pl-next">Zapisz i dodaj kolejną</button>`}<button class="btn pri" type="submit" id="pl-save">Zapisz</button></div></div>
-  </form>`;
+  S.sheet = { typ: "pl", id: pl?.id || null, pliki: [...(pl?.pliki || [])], nowe: [], wgrywa: false, produkt: prod?.id || pl?.produkt || "" };
+  const wyb = pl?.pozycja || pozId || "";
+  const kwota = pl ? f2.format(pl.kwotaGr / 100) : prod ? f2.format(prod.cenaGr / 100) : "";
+  pokazArkusz(`<form id="f-pl" class="ark" novalidate>
+    <h2>${pl ? "Płatność" : prod ? "Płatność za produkt" : "Nowa płatność"}</h2>
+    <label class="pole-l" for="pl-kwota">Kwota</label><div class="kwota-w"><input class="pole kwota" id="pl-kwota" inputmode="decimal" placeholder="0" value="${kwota}" autocomplete="off"><span>zł</span></div>
+    <label class="pole-l" for="pl-poz">Za co</label><select class="pole" id="pl-poz">${opcjePozycji(wyb)}</select>
+    <label class="pole-l" for="pl-opis">Opis <span class="szary">(opcjonalnie)</span></label><input class="pole" id="pl-opis" placeholder="np. zaliczka, klej do płytek" value="${esc(pl?.opis ?? (prod ? [prod.nazwa, prod.model].filter(Boolean).join(" ") : ""))}" autocomplete="off">
+    <label class="pole-l" for="pl-gdzie">Komu</label><input class="pole" id="pl-gdzie" list="dl-gdzie" placeholder="np. Kazik, Leroy Merlin" value="${esc(pl?.gdzie ?? prod?.sklep ?? "")}" autocomplete="off"><datalist id="dl-gdzie">${wykonawcy().map((g) => `<option value="${esc(g)}">`).join("")}</datalist>
+    ${wykonawcy().length ? `<div class="chipy">${wykonawcy().slice(0, 6).map((g) => `<button class="chip" type="button" data-gdzie="${esc(g)}">${esc(g)}</button>`).join("")}</div>` : ""}
+    <div class="dwa"><div><label class="pole-l" for="pl-data">Data</label><input class="pole" id="pl-data" type="date" value="${pl ? pl.data || "" : dzis()}"></div><div><p class="pole-l">Paragon</p><div class="pliki" id="pl-pliki"></div></div></div>
+    <input type="file" id="pl-plik" accept="image/*,application/pdf" multiple hidden>
+    <label class="pole-l" for="pl-notatka">Notatka</label><input class="pole" id="pl-notatka" placeholder="nr faktury, gwarancja" value="${esc(pl?.notatka || "")}" autocomplete="off">
+    <p class="blad" id="pl-blad" hidden></p>
+    <div class="ark-akcje">${pl ? `<button class="btn-jasny zle" type="button" id="pl-usun">Usuń</button>` : ""}<button class="btn-czarny" type="submit" id="pl-zapisz">Zapisz</button></div>
+  </form>`, pl ? null : "#pl-kwota");
   renderPliki();
-  pokazSheet(pl ? null : pozId ? "#pl-kwota" : "#pl-poz");
 }
 function renderPliki() {
   const e = S.sheet; if (!e || e.typ !== "pl") return;
-  const box = $("#pl-files");
-  box.innerHTML = e.pliki.map((p, i) => `<div class="file">${p.typ === "application/pdf" ? `<button type="button" class="btn link" data-pdf="${esc(p.id)}">PDF</button>` : `<img alt="${esc(p.nazwa || "paragon")}" data-blob="${esc(p.id)}" data-zoom="${esc(p.id)}">`}<button type="button" class="x" data-rm="${i}" aria-label="Usuń załącznik">×</button></div>`).join("")
-    + `<button type="button" class="file addfile" id="pl-addfile" ${e.wgrywa ? "disabled" : ""}>${e.wgrywa ? "Wgrywanie…" : "+ zdjęcie lub PDF"}</button>`;
-  for (const img of box.querySelectorAll("img[data-blob]")) blobUrl(img.dataset.blob).then((u) => (img.src = u), () => (img.alt = "brak pliku"));
+  const box = $("#pl-pliki");
+  box.innerHTML = e.pliki.map((p, i) => `<span class="plik">${p.typ === "application/pdf" ? `<button type="button" class="plik-pdf" data-pdf="${esc(p.id)}">PDF</button>` : `<img alt="${esc(p.nazwa || "paragon")}" data-blob="${esc(p.id)}" data-zoom>`}<button type="button" class="plik-x" data-rm="${i}" aria-label="Usuń załącznik">${ikona("x", 14)}</button></span>`).join("")
+    + `<button type="button" class="plik plik-dodaj" id="pl-dodaj-plik" aria-label="Dodaj zdjęcie lub PDF" ${e.wgrywa ? "disabled" : ""}>${e.wgrywa ? "…" : ikona("aparat")}</button>`;
+  for (const img of box.querySelectorAll("img[data-blob]")) blobUrl(img.dataset.blob).then((u) => (img.src = u), () => (img.alt = "brak"));
 }
 async function przygotujPlik(file) {
   if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) return { bytes: new Uint8Array(await file.arrayBuffer()), type: "application/pdf", ext: "pdf" };
@@ -612,197 +480,275 @@ async function wgraj(files) {
       if (S.sheet !== e) { usunPlik(path); return; }
       e.pliki.push({ id: path, typ: type, nazwa: f.name }); e.nowe.push(path);
     } catch (err) {
-      const c = err?.code;
-      if (c === "token") { bladZapisu(err); break; }
-      toast(c === "format" ? `Plik ${f.name} ma nieobsługiwany format. Użyj zdjęcia (JPG, PNG) albo PDF.` : c === "duzy" ? `Plik ${f.name} jest za duży (limit 10 MB).` : `Nie udało się wgrać ${f.name}.`);
+      toast(err?.code === "format" ? `${f.name}: użyj zdjęcia (JPG, PNG) albo PDF.` : err?.code === "duzy" ? `${f.name} jest za duży (limit 10 MB).` : `Nie udało się wgrać ${f.name}.`);
     }
   }
   e.wgrywa = false; renderPliki();
 }
-async function zapiszPl(kolejna) {
+async function zapiszPlatnosc() {
   const e = S.sheet; if (!e || e.wgrywa) return;
-  const kw = parseKwota($("#pl-kwota").value), pozId = $("#pl-poz").value;
-  const blad = !pozId ? "Wybierz pozycję, której dotyczy płatność." : kw === null || kw <= 0 ? "Wpisz kwotę większą od zera, np. 1250,50." : "";
-  if (blad) { const er = $("#pl-err"); er.textContent = blad; er.hidden = false; return; }
+  const kwG = parseKwota($("#pl-kwota").value), pozId = $("#pl-poz").value;
+  const blad = kwG === null || kwG <= 0 ? "Wpisz kwotę, np. 1250,50." : !pozId ? "Wybierz, za co płacisz." : "";
+  if (blad) { const er = $("#pl-blad"); er.textContent = blad; er.hidden = false; return; }
   const id = e.id || losoweId(), stara = platnosci().find((q) => q.id === e.id);
-  const doc = { id, pozycja: pozId, data: $("#pl-data").value || "", kwotaGr: kw, opis: $("#pl-opis").value.trim(), gdzie: $("#pl-gdzie").value.trim(), notatka: $("#pl-notatka").value.trim(), pliki: e.pliki, utworzono: stara?.utworzono || new Date().toISOString() };
+  const doc = { id, pozycja: pozId, data: $("#pl-data").value || "", kwotaGr: kwG, opis: $("#pl-opis").value.trim(), gdzie: $("#pl-gdzie").value.trim(), notatka: $("#pl-notatka").value.trim(), pliki: e.pliki, utworzono: stara?.utworzono || new Date().toISOString() };
   if (stara?.zrodlo) doc.zrodlo = stara.zrodlo;
-  if (e.produkt || stara?.produkt) doc.produkt = e.produkt || stara.produkt;
+  if (e.produkt) doc.produkt = e.produkt;
   const usuniete = (stara?.pliki || []).filter((p) => !e.pliki.some((q) => q.id === p.id)).map((p) => p.id);
-  const nazwa = poz(pozId)?.nazwa || "";
-  for (const b of document.querySelectorAll("#pl-save,#pl-next")) b.disabled = true;
+  $("#pl-zapisz").disabled = true;
   try {
-    await zmien(`${e.id ? "Zmiana płatności" : "Płatność"}: ${nazwa}, ${zl2(kw)}${doc.gdzie ? ", " + doc.gdzie : ""}`, (d) => {
+    await zmien(`${e.id ? "Zmiana płatności" : "Płatność"}: ${poz(pozId)?.nazwa || ""}, ${zl2(kwG)}${doc.gdzie ? ", " + doc.gdzie : ""}`, (d) => {
       const i = d.platnosci.findIndex((q) => q.id === id);
       if (i >= 0) d.platnosci[i] = doc; else d.platnosci.push(doc);
     });
-    S.ostatniaPoz = pozId;
+    e.zapisano = true;
     for (const p of usuniete) usunPlik(p);
-    e.nowe = [];
-    toast(`Zapisano: ${nazwa}, ${zl2(kw)}`);
-    if (kolejna) { otworzPl(null, pozId, e.powrot); $("#pl-data").value = doc.data; $("#pl-gdzie").value = doc.gdzie; }
-    else if (e.powrot) otworzPoz(e.powrot);
-    else zamknij();
-  } catch (err) { bladZapisu(err); for (const b of document.querySelectorAll("#pl-save,#pl-next")) b.disabled = false; }
+    toast(`Zapisano ${zl2(kwG)}: ${poz(pozId)?.nazwa || ""}`);
+    zamknijArkusz();
+  } catch (err) { bladZapisu(err); $("#pl-zapisz").disabled = false; }
 }
-async function usunPl() {
-  const b = $("#pl-del"), e = S.sheet, pl = platnosci().find((q) => q.id === e.id);
-  if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Na pewno usunąć?"; return; }
+async function usunPlatnosc() {
+  const b = $("#pl-usun"), e = S.sheet, pl = platnosci().find((q) => q.id === e.id);
+  if (!b.dataset.pewne) { b.dataset.pewne = "1"; b.textContent = "Na pewno?"; return; }
   try {
     await zmien(`Usunięto płatność: ${poz(pl?.pozycja)?.nazwa || ""}, ${zl2(pl?.kwotaGr)}`, (d) => { d.platnosci = d.platnosci.filter((q) => q.id !== e.id); });
     for (const p of pl?.pliki || []) usunPlik(p.id);
-    toast("Usunięto płatność.");
-    if (e.powrot) otworzPoz(e.powrot); else zamknij();
+    e.zapisano = true; toast("Usunięto płatność."); zamknijArkusz();
   } catch (err) { bladZapisu(err); }
 }
 
-/* ---------- arkusz: wspólne ---------- */
-function pokazSheet(fokus) {
-  $("#veil").hidden = false; document.body.style.overflow = "hidden";
-  $("#sheet").scrollTop = 0;
-  if (fokus) setTimeout(() => $(fokus)?.focus(), 30);
+function arkuszEdycjiPozycji(id) {
+  const p = poz(id); if (!p) return;
+  S.sheet = { typ: "poz", id };
+  const opcje = (lista, w, pusta) => (pusta ? `<option value="">${pusta}</option>` : "") + lista.map((x) => `<option value="${esc(x.id)}" ${x.id === w ? "selected" : ""}>${esc(x.nazwa)}</option>`).join("");
+  pokazArkusz(`<form id="f-poz" class="ark" novalidate>
+    <h2>Edycja pozycji</h2>
+    <label class="pole-l" for="ep-nazwa">Nazwa</label><input class="pole duze" id="ep-nazwa" value="${esc(p.nazwa)}" autocomplete="off">
+    <label class="pole-l" for="ep-plan">Plan</label><div class="kwota-w"><input class="pole kwota mala" id="ep-plan" inputmode="decimal" value="${p.planGr ? f0.format(p.planGr / 100) : ""}" placeholder="0"><span>zł</span></div>
+    <div class="dwa"><div><label class="pole-l" for="ep-pom">Pomieszczenie</label><select class="pole" id="ep-pom">${opcje(pom(), p.pom)}</select></div><div><label class="pole-l" for="ep-kat">Kategoria</label><select class="pole" id="ep-kat">${opcje(kat(), p.kat, "Bez kategorii")}</select></div></div>
+    ${pak().length ? `<label class="pole-l" for="ep-pak">Pakiet</label><select class="pole" id="ep-pak">${opcje(pak(), p.pakiet || "", "Bez pakietu")}</select>` : ""}
+    <label class="przel"><input type="checkbox" id="ep-zak" ${p.zakonczona ? "checked" : ""}><span>Zakończone, nic więcej nie płacę</span></label>
+    <label class="przel"><input type="checkbox" id="ep-zakup" ${p.zakup ? "checked" : ""}><span>Zakup domu, poza wykończeniem</span></label>
+    <label class="pole-l" for="ep-notatka">Notatka</label><textarea class="pole" id="ep-notatka" rows="2" placeholder="zakres, ustalenia">${esc(p.notatka || "")}</textarea>
+    <p class="blad" id="ep-blad" hidden></p>
+    <div class="ark-akcje"><button class="btn-jasny zle" type="button" id="ep-usun">Usuń</button><button class="btn-czarny" type="submit">Zapisz</button></div>
+  </form>`);
 }
-function zamknij(anulowano) {
-  const e = S.sheet;
-  if (anulowano && e?.typ === "pl" && e.nowe?.length) for (const p of e.nowe) usunPlik(p);
-  if (anulowano && e?.typ === "pl" && e.powrot) { otworzPoz(e.powrot); return; }
-  if (anulowano && e?.typ === "prod") { otworzPoz(e.pozId); return; }
-  S.sheet = null; $("#veil").hidden = true; document.body.style.overflow = "";
+async function zapiszEdycjePozycji() {
+  const id = S.sheet.id, nazwa = $("#ep-nazwa").value.trim(), t = $("#ep-plan").value.trim(), plan = t ? parseKwota(t) : 0;
+  const blad = !nazwa ? "Wpisz nazwę." : plan === null || plan < 0 ? "Plan wpisz liczbą." : "";
+  if (blad) { const e = $("#ep-blad"); e.textContent = blad; e.hidden = false; return; }
+  const dane = { nazwa, planGr: plan || 0, pom: $("#ep-pom").value, kat: $("#ep-kat").value, pakiet: $("#ep-pak")?.value || "", zakonczona: $("#ep-zak").checked, zakup: $("#ep-zakup").checked, notatka: $("#ep-notatka").value.trim() };
+  try { await zmien(`Pozycja: ${nazwa}`, (d) => { const p = d.pozycje.find((q) => q.id === id); if (p) Object.assign(p, dane); }); toast("Zapisano."); zamknijArkusz(); }
+  catch (e) { bladZapisu(e); }
 }
+async function usunPozycje() {
+  const id = S.sheet.id, b = $("#ep-usun"), n = platnosci().filter((q) => q.pozycja === id).length;
+  if (n) { const e = $("#ep-blad"); e.textContent = `Ta pozycja ma ${n} płatności. Najpierw je usuń albo przepnij.`; e.hidden = false; return; }
+  if (!b.dataset.pewne) { b.dataset.pewne = "1"; b.textContent = "Na pewno?"; return; }
+  const p = poz(id);
+  try { await zmien(`Usunięto pozycję: ${p?.nazwa}`, (d) => { d.pozycje = d.pozycje.filter((q) => q.id !== id); }); zamknijArkusz(); location.hash = p?.zakup ? "#dom" : `#pom/${p?.pom}`; toast("Usunięto pozycję."); }
+  catch (e) { bladZapisu(e); }
+}
+
+function arkuszProduktu(pozId, prodId) {
+  const x = (poz(pozId)?.produkty || []).find((q) => q.id === prodId);
+  S.sheet = { typ: "prod", pozId, id: x?.id || null };
+  pokazArkusz(`<form id="f-prod" class="ark" novalidate>
+    <h2>${x ? "Produkt" : "Nowy produkt"}</h2>
+    <label class="pole-l" for="pr-nazwa">Nazwa</label><input class="pole duze" id="pr-nazwa" value="${esc(x?.nazwa || "")}" placeholder="np. Zmywarka Bosch Serie 6" autocomplete="off">
+    <div class="dwa"><div><label class="pole-l" for="pr-model">Model</label><input class="pole" id="pr-model" value="${esc(x?.model || "")}" autocomplete="off"></div><div><label class="pole-l" for="pr-cena">Cena</label><input class="pole" id="pr-cena" inputmode="decimal" value="${x ? f0.format(x.cenaGr / 100) : ""}" placeholder="0 zł"></div></div>
+    <label class="pole-l" for="pr-sklep">Sklep</label><input class="pole" id="pr-sklep" value="${esc(x?.sklep || "")}" autocomplete="off">
+    <label class="pole-l" for="pr-link">Link</label><input class="pole" id="pr-link" type="url" value="${esc(x?.link || "")}" placeholder="https://" autocomplete="off">
+    <label class="pole-l" for="pr-notatka">Notatka</label><input class="pole" id="pr-notatka" value="${esc(x?.notatka || "")}" autocomplete="off">
+    <p class="blad" id="pr-blad" hidden></p>
+    <div class="ark-akcje">${x ? `<button class="btn-jasny zle" type="button" id="pr-usun">Usuń</button>` : ""}<button class="btn-czarny" type="submit">Zapisz</button></div>
+  </form>`, x ? null : "#pr-nazwa");
+}
+async function zapiszProdukt() {
+  const e = S.sheet, nazwa = $("#pr-nazwa").value.trim(), cena = parseKwota($("#pr-cena").value), link = $("#pr-link").value.trim();
+  const blad = !nazwa ? "Wpisz nazwę." : cena === null || cena <= 0 ? "Wpisz cenę." : link && !/^https?:\/\//i.test(link) ? "Link musi zaczynać się od https://" : "";
+  if (blad) { const er = $("#pr-blad"); er.textContent = blad; er.hidden = false; return; }
+  const id = e.id || losoweId();
+  const dane = { id, nazwa, model: $("#pr-model").value.trim(), cenaGr: cena, sklep: $("#pr-sklep").value.trim(), link, notatka: $("#pr-notatka").value.trim() };
+  try {
+    await zmien(`Produkt: ${nazwa}, ${zl2(cena)}`, (d) => { const p = d.pozycje.find((q) => q.id === e.pozId); if (!p) return; p.produkty ??= []; const i = p.produkty.findIndex((q) => q.id === id); if (i >= 0) p.produkty[i] = dane; else p.produkty.push(dane); });
+    toast(`Zapisano: ${nazwa}`); zamknijArkusz();
+  } catch (err) { bladZapisu(err); }
+}
+async function usunProdukt() {
+  const e = S.sheet, b = $("#pr-usun");
+  if (!b.dataset.pewne) { b.dataset.pewne = "1"; b.textContent = "Na pewno?"; return; }
+  try { await zmien("Usunięto produkt", (d) => { const p = d.pozycje.find((q) => q.id === e.pozId); if (p) p.produkty = (p.produkty || []).filter((q) => q.id !== e.id); }); zamknijArkusz(); }
+  catch (err) { bladZapisu(err); }
+}
+
+function arkuszBudzetu() {
+  const b = S.dane.ustawienia.budzetGr || 0;
+  S.sheet = { typ: "budzet" };
+  pokazArkusz(`<form id="f-budzet" class="ark" novalidate>
+    <h2>Budżet wykończenia</h2>
+    <p class="przyp">Ile masz pieniędzy na wykończenie, razem z tym, co już wydałeś. Porównam to z planami pozycji.</p>
+    <div class="kwota-w"><input class="pole kwota" id="b-kwota" inputmode="decimal" value="${b ? f0.format(b / 100) : ""}" placeholder="0" autocomplete="off"><span>zł</span></div>
+    <div class="ark-akcje">${b ? `<button class="btn-jasny" type="button" id="b-wyczysc">Usuń kwotę</button>` : ""}<button class="btn-czarny" type="submit">Zapisz</button></div>
+  </form>`, "#b-kwota");
+}
+async function zapiszBudzet(wyczysc) {
+  const t = wyczysc ? "" : $("#b-kwota").value.trim(), v = t ? parseKwota(t) : 0;
+  if (v === null || v < 0) { toast("Wpisz kwotę liczbą, np. 400000."); return; }
+  try { await zmien(v ? `Budżet wykończenia: ${zl(v)}` : "Usunięto kwotę budżetu", (d) => { if (v) d.ustawienia.budzetGr = v; else delete d.ustawienia.budzetGr; }); toast(v ? `Budżet: ${zl(v)}` : "Budżet liczony z planów."); zamknijArkusz(); }
+  catch (e) { bladZapisu(e); }
+}
+
+/* ---------- komunikaty ---------- */
+let toastT;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3500); }
+function sync(s) { S.sync = s; const e = $("#sync"); if (e) e.dataset.s = s; }
+function bladZapisu(e) {
+  const c = e?.code; sync("err");
+  toast(c === "siec" ? "Brak internetu. Nic nie zostało zapisane." : c === "brak-bazy" ? "Baza nie jest przygotowana." : c === "konflikt" ? "Ktoś zapisywał w tym samym czasie. Spróbuj jeszcze raz." : "Nie udało się zapisać. Spróbuj ponownie.");
+}
+
+/* ---------- CSV ---------- */
+function pobierzCsv(nazwa, rows) {
+  const q = (v) => { v = String(v ?? ""); return /[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
+  const kwc = (gr) => f2.format((gr || 0) / 100).replace(/\s/g, "");
+  const tekst = "﻿" + rows.map((r) => r.map((c) => q(typeof c === "object" && c ? kwc(c.gr) : c)).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([tekst], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a"); a.href = url; a.download = `${nazwa}-${dzis()}.csv`;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+function csvPozycje() {
+  const rows = [["Pomieszczenie", "Pozycja", "Kategoria", "Plan", "Zapłacone", "Zostało", "Zakończona", "Zakup domu", "Pakiet", "Produkty", "Notatka"]];
+  for (const x of licz().values()) rows.push([nazwaPom(x.p.pom), x.p.nazwa, nazwaKat(x.p.kat), { gr: x.plan }, { gr: x.zapl }, { gr: x.zostalo }, x.p.zakonczona ? "tak" : "", x.p.zakup ? "tak" : "", nazwaPak(x.p.pakiet), (x.p.produkty || []).map((q) => `${q.nazwa} ${q.model || ""} ${f2.format(q.cenaGr / 100)} zł`.replace(/\s+/g, " ")).join(" | "), x.p.notatka]);
+  pobierzCsv("koszty-pozycje", rows);
+}
+function csvPlatnosci() {
+  const rows = [["Data", "Pozycja", "Pomieszczenie", "Opis", "Komu", "Kwota", "Notatka"]];
+  for (const pl of [...platnosci()].sort((a, b) => (a.data || "").localeCompare(b.data || ""))) { const p = poz(pl.pozycja); rows.push([pl.data, p?.nazwa, p ? nazwaPom(p.pom) : "", pl.opis, pl.gdzie, { gr: pl.kwotaGr }, pl.notatka]); }
+  pobierzCsv("koszty-platnosci", rows);
+}
+
+/* ---------- nawigacja ---------- */
+function trasa() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  const [typ, ...reszta] = h.split("/"); const arg = reszta.join("/");
+  if (typ === "pom" && arg) return { typ: "pom", id: arg };
+  if (typ === "poz" && arg) return { typ: "poz", id: arg };
+  if (typ === "lista") { if (arg) S.fl = { q: "", pom: "", stan: arg }; return { typ: "lista" }; }
+  if (typ === "platnosci") { if (arg) S.fp.gdzie = arg; return { typ: "platnosci" }; }
+  if (typ === "ustawienia") return { typ: "ustawienia" };
+  return { typ: "dom" };
+}
+function render() {
+  const e = S.ekran = trasa();
+  const el = $("#ekran");
+  for (const b of document.querySelectorAll("#nav [data-ekran]")) b.classList.toggle("on", b.dataset.ekran === (["pom", "poz"].includes(e.typ) ? "dom" : e.typ));
+  if (!S.gotowe) { el.innerHTML = `<div class="ladowanie">${S.blad ? esc(S.blad) : "Wczytywanie…"}</div>`; return; }
+  licz();
+  const klucz = e.typ + "/" + (e.id || "");
+  if ((e.typ === "lista" || e.typ === "platnosci") && S.ostatniKlucz === klucz && $("#wyniki")) { odswiezWyniki(); return; }
+  if (e.typ === "ustawienia" && S.ostatniKlucz === klucz && el.contains(document.activeElement) && document.activeElement.matches("input")) return;
+  const przewin = S.ostatniKlucz !== klucz;
+  S.ostatniKlucz = klucz;
+  el.innerHTML = e.typ === "pom" ? ekranPom(e.id) : e.typ === "poz" ? ekranPoz(e.id) : e.typ === "lista" ? ekranLista() : e.typ === "platnosci" ? ekranPlatnosci() : e.typ === "ustawienia" ? ekranUstawienia() : ekranDom();
+  if (e.typ === "lista" || e.typ === "platnosci") odswiezWyniki();
+  sync(S.sync || "ok");
+  if (przewin) window.scrollTo(0, 0);
+}
+function odswiezWyniki() { const w = $("#wyniki"); if (w) w.innerHTML = S.ekran.typ === "lista" ? wynikiListy() : wynikiPlatnosci(); }
+function przyciskPlus() {
+  const e = S.ekran;
+  if (e.typ === "pom") return arkuszNowejPozycji(e.id);
+  if (e.typ === "poz") return arkuszPlatnosci(null, e.id);
+  S.menu = !S.menu; $("#menu-plus").hidden = !S.menu; $("#nav-plus").classList.toggle("otwarty", S.menu);
+}
+function zamknijMenu() { S.menu = false; $("#menu-plus").hidden = true; $("#nav-plus").classList.remove("otwarty"); }
 
 /* ---------- wczytanie i odświeżanie ---------- */
 async function wczytaj() {
-  try {
-    const p = await pobierz();
-    S.wersja = p.wersja; S.blad = ""; ustawDane(p.dane); sync("ok", "Połączono");
-  } catch (e) {
-    S.blad = e?.code === "brak-bazy" ? "Baza nie jest jeszcze przygotowana. W Supabase trzeba raz uruchomić skrypt supabase.sql." : e?.code === "siec" ? "Brak połączenia z internetem. Spróbuję ponownie za chwilę." : "Nie udało się wczytać danych. Spróbuję ponownie za chwilę.";
-    sync("err", "Brak połączenia"); render();
-  }
+  try { const p = await pobierz(); S.wersja = p.wersja; S.blad = ""; ustawDane(p.dane); sync("ok"); }
+  catch (e) { S.blad = e?.code === "brak-bazy" ? "Baza nie jest jeszcze przygotowana." : e?.code === "siec" ? "Brak internetu. Spróbuję ponownie za chwilę." : "Nie udało się wczytać danych. Spróbuję ponownie za chwilę."; sync("err"); render(); }
 }
 async function odswiez() {
-  if (zajete || S.sheet || S.edytujBudzet || document.visibilityState !== "visible") return;
+  if (zajete || S.sheet || document.visibilityState !== "visible") return;
   if (!S.gotowe) return wczytaj();
-  try { const p = await pobierz(); if (p.wersja !== S.wersja && !zajete && !S.sheet) { S.wersja = p.wersja; ustawDane(p.dane); } sync("ok", "Aktualne"); }
-  catch (e) { sync("err", e?.code === "siec" ? "Brak internetu" : "Brak połączenia"); }
-}
-
-/* ---------- render ---------- */
-function render() {
-  const el = $("#v-login");
-  el.hidden = !S.blad || S.gotowe;
-  if (!el.hidden) el.innerHTML = `<div class="banner">${esc(S.blad)}</div>`;
-  for (const v of WIDOKI) { $("#v-" + v).hidden = S.view !== v; $("#t-" + v).setAttribute("aria-selected", S.view === v); }
-  $("#fab").hidden = !S.gotowe || !pozycje().length;
-  if (S.view === "podsumowanie") renderPodsumowanie();
-  if (S.view === "pozycje") renderPozycje();
-  if (S.view === "platnosci") renderPlatnosci();
-  if (S.view === "ustawienia") renderUstawienia();
-}
-function idz(v) {
-  S.view = v; render(); window.scrollTo(0, 0);
-  try { localStorage.setItem("kd-view", v); } catch {}
+  try { const p = await pobierz(); if (p.wersja !== S.wersja && !zajete && !S.sheet) { S.wersja = p.wersja; ustawDane(p.dane); } sync("ok"); }
+  catch { sync("err"); }
 }
 
 /* ---------- zdarzenia ---------- */
 function wire() {
-  const d = new Date();
-  $("#today").textContent = `stan na ${d.getDate()} ${["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września", "października", "listopada", "grudnia"][d.getMonth()]} ${d.getFullYear()}`;
-  document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => idz(b.dataset.v)));
-  $("#fab").addEventListener("click", () => otworzPl(null));
-  $("#fp-q").addEventListener("input", (e) => { S.fp.q = e.target.value; renderPozycje(); });
-  $("#fp-pom").addEventListener("change", (e) => { S.fp.pom = e.target.value; renderPozycje(); });
-  $("#fp-kat").addEventListener("change", (e) => { S.fp.kat = e.target.value; renderPozycje(); });
-  $("#fp-stan").addEventListener("change", (e) => { S.fp.stan = e.target.value; renderPozycje(); });
-  $("#fp-clear").addEventListener("click", () => { S.fp = { q: "", pom: "", kat: "", stan: "", pak: "" }; renderPozycje(); });
-  $("#fl-q").addEventListener("input", (e) => { S.fl.q = e.target.value; renderPlatnosci(); });
-  $("#fl-pom").addEventListener("change", (e) => { S.fl.pom = e.target.value; renderPlatnosci(); });
-  $("#fl-gdzie").addEventListener("change", (e) => { S.fl.gdzie = e.target.value; renderPlatnosci(); });
-  $("#fl-clear").addEventListener("click", () => { S.fl = { q: "", pom: "", gdzie: "" }; renderPlatnosci(); });
-
+  window.addEventListener("hashchange", () => { zamknijMenu(); render(); });
+  window.addEventListener("popstate", () => { if (S.cichyPop) { S.cichyPop = false; return; } if (S.sheet) ukryjArkusz(); });
+  $("#nav-plus").addEventListener("click", przyciskPlus);
   document.addEventListener("click", (ev) => {
     const t = ev.target;
-    const plB = t.closest("[data-pl]"); if (plB) { otworzPl(plB.dataset.pl, null, S.sheet?.typ === "poz" ? S.sheet.id : null); return; }
-    const pozB = t.closest("[data-poz]"); if (pozB) { otworzPoz(pozB.dataset.poz); return; }
-    const nPl = t.closest("[data-nowa-pl]"); if (nPl) { otworzPl(null, nPl.dataset.nowaPl, nPl.dataset.nowaPl); return; }
-    if (t.closest("[data-nowa-poz]")) { otworzPoz(null); return; }
-    if (t.id === "b-edytuj") { S.edytujBudzet = true; renderPodsumowanie(); setTimeout(() => $("#b-kwota")?.focus(), 20); return; }
-    if (t.id === "b-anuluj") { S.edytujBudzet = false; renderPodsumowanie(); return; }
-    const np = t.closest("[data-nowy-prod]"); if (np) { otworzProd(np.dataset.nowyProd, null); return; }
-    const pr = t.closest("[data-prod]"); if (pr) { const [a, b] = pr.dataset.prod.split("|"); otworzProd(a, b); return; }
-    const kp = t.closest("[data-kup]"); if (kp) { const [a, b] = kp.dataset.kup.split("|"); kupProdukt(a, b); return; }
-    if (t.id === "pr-del") { usunProd(); return; }
-    if (t.closest("[data-zamknij]")) { zamknij(true); return; }
-    const fp = t.closest("[data-fpom]"); if (fp) { S.fp = { q: "", pom: fp.dataset.fpom, kat: "", stan: "", pak: "" }; idz("pozycje"); return; }
-    const fpk = t.closest("[data-fpak]"); if (fpk) { S.fp = { q: "", pom: "", kat: "", stan: "", pak: fpk.dataset.fpak }; idz("pozycje"); return; }
-    const fk = t.closest("[data-fkat]"); if (fk) { S.fp = { q: "", pom: "", kat: fk.dataset.fkat, stan: "", pak: "" }; idz("pozycje"); return; }
-    const fg = t.closest("[data-fgdzie]"); if (fg) { S.fl = { q: "", pom: "", gdzie: fg.dataset.fgdzie }; idz("platnosci"); return; }
+    if (S.menu && !t.closest("#menu-plus") && !t.closest("#nav-plus")) zamknijMenu();
+    const m = t.closest("[data-menu]"); if (m) { zamknijMenu(); m.dataset.menu === "pl" ? arkuszPlatnosci(null, "") : arkuszNowejPozycji(""); return; }
+    if (t.closest("[data-zamknij]")) { zamknijArkusz(); return; }
+    const plB = t.closest("[data-pl]"); if (plB) { arkuszPlatnosci(plB.dataset.pl); return; }
+    const np = t.closest("[data-nowa-poz]"); if (np) { arkuszNowejPozycji(np.dataset.nowaPoz); return; }
+    const npl = t.closest("[data-nowa-pl]"); if (npl) { arkuszPlatnosci(null, npl.dataset.nowaPl); return; }
+    const ep = t.closest("[data-edytuj-poz]"); if (ep) { arkuszEdycjiPozycji(ep.dataset.edytujPoz); return; }
+    const nprod = t.closest("[data-nowy-prod]"); if (nprod) { arkuszProduktu(nprod.dataset.nowyProd, null); return; }
+    const prod = t.closest("[data-prod]"); if (prod) { const [a, b] = prod.dataset.prod.split("|"); arkuszProduktu(a, b); return; }
+    const kup = t.closest("[data-kup]"); if (kup) { const [a, b] = kup.dataset.kup.split("|"); arkuszPlatnosci(null, a, (poz(a)?.produkty || []).find((q) => q.id === b)); return; }
+    if (t.closest("[data-budzet]")) { arkuszBudzetu(); return; }
+    const wyb = t.closest("[data-wybor]"); if (wyb) { for (const b of document.querySelectorAll(`#arkusz [data-wybor="${wyb.dataset.wybor}"]`)) { const on = b === wyb && !(b.classList.contains("on") && wyb.dataset.wybor === "kat"); b.classList.toggle("on", on); b.setAttribute("aria-checked", on); } return; }
+    const gd = t.closest("[data-gdzie]"); if (gd) { $("#pl-gdzie").value = gd.dataset.gdzie; return; }
+    const fs = t.closest("[data-fl-stan]"); if (fs) { S.fl.stan = fs.dataset.flStan; for (const b of document.querySelectorAll("[data-fl-stan]")) b.classList.toggle("on", b === fs); odswiezWyniki(); return; }
+    const fpm = t.closest("[data-fl-pom]"); if (fpm) { S.fl.pom = fpm.dataset.flPom; for (const b of document.querySelectorAll("[data-fl-pom]")) b.classList.toggle("on", b === fpm); odswiezWyniki(); return; }
+    const fg = t.closest("[data-fp-gdzie]"); if (fg) { S.fp.gdzie = fg.dataset.fpGdzie; for (const b of document.querySelectorAll("[data-fp-gdzie]")) b.classList.toggle("on", b === fg); odswiezWyniki(); return; }
     const z = t.closest("[data-zoom]"); if (z && z.src) { const lb = document.createElement("div"); lb.className = "lightbox"; lb.innerHTML = `<img src="${z.src}" alt="">`; lb.addEventListener("click", () => lb.remove()); document.body.append(lb); return; }
     const pdf = t.closest("[data-pdf]"); if (pdf) { const okno = window.open("", "_blank"); blobUrl(pdf.dataset.pdf).then((u) => { if (okno) okno.location.href = u; else location.href = u; }, () => { okno?.close(); toast("Nie udało się otworzyć pliku."); }); return; }
     const rm = t.closest("[data-rm]"); if (rm && S.sheet?.typ === "pl") { S.sheet.pliki.splice(+rm.dataset.rm, 1); renderPliki(); return; }
-    if (t.closest("#pl-addfile")) { $("#pl-file").click(); return; }
-    if (t.id === "pl-next") { zapiszPl(true); return; }
-    if (t.id === "pl-del") { usunPl(); return; }
-    if (t.id === "p-del") { usunPoz(); return; }
-    const ud = t.closest("[data-u-del]"); if (ud) { S.usuwanie = { typ: ud.dataset.uDel, id: ud.dataset.id }; renderUstawienia(true); return; }
-    if (t.closest("[data-del-no]")) { S.usuwanie = null; renderUstawienia(true); return; }
-    if (t.closest("[data-del-ok]")) { usunSlownik(); return; }
+    if (t.closest("#pl-dodaj-plik")) { $("#pl-plik").click(); return; }
+    if (t.id === "np-kolejna") { zapiszNowaPozycje(true); return; }
+    if (t.id === "pl-usun") { usunPlatnosc(); return; }
+    if (t.id === "ep-usun") { usunPozycje(); return; }
+    if (t.id === "pr-usun") { usunProdukt(); return; }
+    if (t.id === "b-wyczysc") { zapiszBudzet(true); return; }
+    const kol = t.closest("[data-kolor]"); if (kol) { const id = kol.dataset.kolor, i = PASTELE.indexOf(kolorPom(id)), nowy = PASTELE[(i + 1) % PASTELE.length]; kol.style.background = nowy; zmien("Kolor pomieszczenia", (d) => { const r = d.ustawienia.pomieszczenia.find((q) => q.id === id); if (r) r.kolor = nowy; }).catch(bladZapisu); return; }
+    const ud = t.closest("[data-u-del]"); if (ud) { S.usuwanie = { typ: ud.dataset.uDel, id: ud.dataset.id }; S.ostatniKlucz = ""; render(); return; }
+    if (t.closest("[data-del-no]")) { S.usuwanie = null; S.ostatniKlucz = ""; render(); return; }
+    if (t.closest("[data-del-ok]")) { usunZeSlownika(); return; }
     if (t.id === "u-csv-poz") { csvPozycje(); return; }
     if (t.id === "u-csv-pl") { csvPlatnosci(); return; }
   });
+  document.addEventListener("input", (ev) => { if (ev.target.id === "fl-q") { S.fl.q = ev.target.value; odswiezWyniki(); } });
   document.addEventListener("change", (ev) => {
     const t = ev.target;
-    if (t.id === "pl-file") { const fs = [...t.files]; t.value = ""; if (fs.length) wgraj(fs); return; }
+    if (t.id === "pl-plik") { const fs = [...t.files]; t.value = ""; if (fs.length) wgraj(fs); return; }
     const u = t.dataset.u; if (!u || !S.gotowe) return;
-    const id = t.dataset.id, lista = slownik(u);
-    const x = lista.find((y) => y.id === id), v = t.value.trim();
+    const id = t.dataset.id, x = slownik(u).find((y) => y.id === id), v = t.value.trim();
     if (!x || !v || v === x.nazwa) { t.value = x?.nazwa || ""; return; }
     t.blur();
     zmien(`Zmiana nazwy: ${x.nazwa} → ${v}`, (d) => { const y = (d.ustawienia[SLOWNIK[u].klucz] ??= []).find((q) => q.id === id); if (y) y.nazwa = v; }).catch(bladZapisu);
   });
   document.addEventListener("submit", (ev) => {
-    const f = ev.target;
-    ev.preventDefault();
-    if (f.id === "form-poz") { zapiszPoz(); return; }
-    if (f.id === "form-pl") { zapiszPl(false); return; }
-    if (f.id === "form-prod") { zapiszProd(); return; }
-    if (f.id === "form-budzet") {
-      const txt = $("#b-kwota").value.trim(), v = txt ? parseKwota(txt) : 0;
-      if (v === null || v < 0) { toast("Wpisz kwotę liczbą, np. 400000."); return; }
-      S.edytujBudzet = false;
-      zmien(v ? `Budżet wykończenia: ${zl(v)}` : "Usunięto kwotę budżetu", (d) => { if (v) d.ustawienia.budzetGr = v; else delete d.ustawienia.budzetGr; }).then(() => toast(v ? `Budżet: ${zl(v)}` : "Budżet liczony z planów pozycji."), bladZapisu);
-      renderPodsumowanie(); return;
-    }
-    if (f.id === "u-add-pom" || f.id === "u-add-kat" || f.id === "u-add-pak") {
+    const f = ev.target; ev.preventDefault();
+    if (f.id === "f-nowa-poz") return zapiszNowaPozycje(false);
+    if (f.id === "f-pl") return zapiszPlatnosc();
+    if (f.id === "f-poz") return zapiszEdycjePozycji();
+    if (f.id === "f-prod") return zapiszProdukt();
+    if (f.id === "f-budzet") return zapiszBudzet(false);
+    const typ = f.dataset.dodaj;
+    if (typ) {
       const inp = f.querySelector("input"), n = inp.value.trim(); if (!n) return;
-      const typ = f.id.slice(6);
       if (slownik(typ).some((x) => x.nazwa.toLowerCase() === n.toLowerCase())) { toast(`„${n}” już jest na liście.`); return; }
       inp.value = ""; inp.blur();
-      zmien(`Dodano ${SLOWNIK[typ].nazwa}: ${n}`, (d) => {
-        const l = (d.ustawienia[SLOWNIK[typ].klucz] ??= []);
-        l.push({ id: noweId(l, n), nazwa: n });
-      }).catch(bladZapisu);
+      zmien(`Dodano ${SLOWNIK[typ].nazwa}: ${n}`, (d) => { const l = (d.ustawienia[SLOWNIK[typ].klucz] ??= []); l.push({ id: noweId(l, n), nazwa: n }); }).then(() => { S.ostatniKlucz = ""; render(); }, bladZapisu);
     }
   });
-  $("#veil").addEventListener("click", (e) => { if (e.target.id === "veil") zamknij(true); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { const lb = $(".lightbox"); if (lb) lb.remove(); else if (S.sheet) zamknij(true); } });
-
-  const tip = $("#tip");
-  document.addEventListener("pointerover", (e) => {
-    const t = e.target.closest("[data-tip]"); if (!t) { tip.hidden = true; return; }
-    tip.textContent = t.dataset.tip; tip.hidden = false;
-    const r = t.getBoundingClientRect();
-    tip.style.left = Math.max(8, Math.min(innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
-    tip.style.top = Math.max(8, r.top + (r.height - (t.querySelector("b")?.offsetHeight || 0)) - tip.offsetHeight - 8) + "px";
-  });
-  window.addEventListener("hashchange", () => { const v = location.hash.slice(1); if (WIDOKI.includes(v) && v !== S.view) idz(v); });
+  $("#zaslona").addEventListener("click", (e) => { if (e.target.id === "zaslona") zamknijArkusz(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { const lb = $(".lightbox"); if (lb) lb.remove(); else if (S.sheet) zamknijArkusz(); else if (S.menu) zamknijMenu(); } });
   document.addEventListener("visibilitychange", odswiez);
   setInterval(odswiez, 15000);
 }
-async function usunSlownik() {
-  const { typ, id } = S.usuwanie;
-  const pole = SLOWNIK[typ].pole;
-  const n = pozycje().filter((p) => p[pole] === id).length, cel = typ === "pak" ? "" : $("#u-move")?.value;
+async function usunZeSlownika() {
+  const { typ, id } = S.usuwanie, pole = SLOWNIK[typ].pole;
+  const n = pozycje().filter((p) => p[pole] === id).length, cel = typ === "pak" ? "" : $("#u-move")?.value || "";
   if (n && !cel && typ !== "pak") return;
   try {
     await zmien(`Usunięto ${SLOWNIK[typ].nazwa} ${id}${n ? `, przeniesiono ${n} pozycji` : ""}`, (d) => {
@@ -810,14 +756,12 @@ async function usunSlownik() {
       const l = d.ustawienia[SLOWNIK[typ].klucz] ??= [];
       const i = l.findIndex((x) => x.id === id); if (i >= 0) l.splice(i, 1);
     });
-    S.usuwanie = null; renderUstawienia(true);
+    S.usuwanie = null; S.ostatniKlucz = ""; render();
   } catch (e) { bladZapisu(e); }
 }
 
 /* ---------- start ---------- */
-try { const v = localStorage.getItem("kd-view"); if (WIDOKI.includes(v)) S.view = v; } catch {}
-const h = location.hash.slice(1); if (WIDOKI.includes(h)) S.view = h;
-try { localStorage.removeItem("kd-gh-token"); } catch {}
-if (/^klucz=/.test(h)) history.replaceState(null, "", location.pathname + location.search);
+try { localStorage.removeItem("kd-gh-token"); localStorage.removeItem("kd-view"); } catch {}
+if (/^klucz=/.test(location.hash.slice(1)) || ["podsumowanie", "pozycje"].includes(location.hash.slice(1))) history.replaceState(null, "", location.pathname + location.search);
 wire(); render(); wczytaj();
 })();
