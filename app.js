@@ -1,27 +1,6 @@
 (() => {
 const REPO_DANE = { owner: "olgaerobert-code", repo: "koszty-domu-dane", plik: "dane.json", branch: "main" };
-const DOMYSLNE = {
-  pomieszczenia: [
-    { id: "caly-dom", nazwa: "Cały dom", budzetGr: 0 },
-    { id: "kuchnia", nazwa: "Kuchnia", budzetGr: 0 },
-    { id: "salon", nazwa: "Salon", budzetGr: 0 },
-    { id: "sypialnia", nazwa: "Sypialnia", budzetGr: 0 },
-    { id: "lazienka", nazwa: "Łazienka", budzetGr: 0 },
-    { id: "przedpokoj", nazwa: "Przedpokój", budzetGr: 0 },
-  ],
-  kategorie: [
-    { id: "materialy", nazwa: "Materiały budowlane" },
-    { id: "robocizna", nazwa: "Robocizna" },
-    { id: "meble", nazwa: "Meble i zabudowy" },
-    { id: "agd", nazwa: "AGD i RTV" },
-    { id: "elektryka", nazwa: "Elektryka i oświetlenie" },
-    { id: "hydraulika", nazwa: "Hydraulika i armatura" },
-    { id: "podlogi", nazwa: "Podłogi i płytki" },
-    { id: "drzwi", nazwa: "Drzwi i okna" },
-    { id: "dekoracje", nazwa: "Dekoracje i tekstylia" },
-    { id: "inne", nazwa: "Transport i inne" },
-  ],
-};
+const PUSTE = { wersja: 2, ustawienia: { pomieszczenia: [{ id: "caly-dom", nazwa: "Cały dom" }], kategorie: [{ id: "inne", nazwa: "Inne" }] }, pozycje: [], platnosci: [] };
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -37,6 +16,7 @@ const slug = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").rep
 const noweId = (lista, nazwa) => { let b = slug(nazwa), id = b, i = 2; while (lista.some((x) => x.id === id)) id = b + "-" + i++; return id; };
 const losoweId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const klon = (o) => JSON.parse(JSON.stringify(o));
+const dataPL = (d) => d ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(2, 4)}` : "—";
 
 function parseKwota(s) {
   s = String(s ?? "").replace(/zł|pln/gi, "").replace(/[\s  ']/g, "");
@@ -48,19 +28,6 @@ function parseKwota(s) {
   const n = Number(s);
   return Number.isFinite(n) ? Math.round(n * 100) : null;
 }
-function iso(y, m, d) {
-  y = +y; m = +m; d = +d;
-  if (!(y > 1990 && y < 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31)) return "";
-  return `${y}-${pad(m)}-${pad(d)}`;
-}
-function parseData(s) {
-  s = String(s ?? "").trim(); let m;
-  if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return iso(m[1], m[2], m[3]);
-  if ((m = s.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})$/))) return iso(m[3].length === 2 ? "20" + m[3] : m[3], m[2], m[1]);
-  if ((m = s.match(/^(\d{1,2})[.\/](\d{1,2})$/))) return iso(new Date().getFullYear(), m[2], m[1]);
-  return "";
-}
-const dataPL = (d) => d ? `${d.slice(8, 10)}.${d.slice(5, 7)}` : "—";
 
 /* ---------- GitHub jako baza ---------- */
 const TOKEN_KEY = "kd-gh-token";
@@ -82,12 +49,18 @@ async function gh(path, opts = {}) {
   }
   return r;
 }
+function normalizuj(d) {
+  d.ustawienia ??= klon(PUSTE.ustawienia);
+  d.ustawienia.pomieszczenia ??= []; d.ustawienia.kategorie ??= [];
+  d.pozycje ??= []; d.platnosci ??= [];
+  return d;
+}
 async function pobierz() {
   const r = await gh(sciezka(REPO_DANE.plik) + "?ref=" + REPO_DANE.branch);
   if (r.status === 404) {
     const repo = await gh(`/repos/${REPO_DANE.owner}/${REPO_DANE.repo}`);
     if (!repo.ok) throw { code: "dostep", status: 404 };
-    return { sha: null, dane: { wersja: 1, ustawienia: klon(DOMYSLNE), wydatki: [] } };
+    return { sha: null, dane: klon(PUSTE) };
   }
   if (!r.ok) throw { code: "inny", status: r.status };
   const j = await r.json();
@@ -97,9 +70,7 @@ async function pobierz() {
     const b = await gh(`/repos/${REPO_DANE.owner}/${REPO_DANE.repo}/git/blobs/${j.sha}`, { headers: { Accept: "application/vnd.github.raw+json" } });
     tekst = await b.text();
   }
-  const dane = JSON.parse(tekst);
-  dane.ustawienia ??= klon(DOMYSLNE); dane.wydatki ??= [];
-  return { sha: j.sha, dane };
+  return { sha: j.sha, dane: normalizuj(JSON.parse(tekst)) };
 }
 let kolejka = Promise.resolve();
 function wKolejce(fn) { const p = kolejka.then(fn); kolejka = p.catch(() => {}); return p; }
@@ -145,18 +116,48 @@ function blobUrl(path) {
   return bloby.get(path);
 }
 
+/* ---------- stan ---------- */
 const S = {
-  token: czytajToken(), zalogowany: false, logowanie: false, bladLogowania: "",
-  dane: null, sha: null, ust: null, wyd: [], ustLoaded: false, wydLoaded: false,
-  view: "podsumowanie", f: { q: "", pom: "", kat: "", st: "" },
-  edit: null, usuwanie: null, imp: null, importuje: false,
+  token: czytajToken(), zalogowany: false, logowanie: false, cichy: false, bladLogowania: "",
+  dane: null, sha: null, gotowe: false, calc: null,
+  view: "podsumowanie",
+  fp: { q: "", pom: "", kat: "", stan: "" },
+  fl: { q: "", pom: "", gdzie: "" },
+  sheet: null, usuwanie: null,
 };
-function ustawDane(d) { S.dane = d; S.ust = d.ustawienia; S.wyd = d.wydatki; S.ustLoaded = S.wydLoaded = true; render(); }
-const pisanie = () => S.zalogowany;
-const pom = () => S.ust?.pomieszczenia || [];
-const kat = () => S.ust?.kategorie || [];
+const WIDOKI = ["podsumowanie", "pozycje", "platnosci", "ustawienia"];
+function ustawDane(d) { S.dane = d; S.gotowe = true; S.calc = null; render(); }
+const pom = () => S.dane?.ustawienia.pomieszczenia || [];
+const kat = () => S.dane?.ustawienia.kategorie || [];
+const pozycje = () => S.dane?.pozycje || [];
+const platnosci = () => S.dane?.platnosci || [];
 const nazwaPom = (id) => pom().find((p) => p.id === id)?.nazwa || "Bez pomieszczenia";
 const nazwaKat = (id) => kat().find((k) => k.id === id)?.nazwa || "Bez kategorii";
+const poz = (id) => pozycje().find((p) => p.id === id);
+
+/* Prognoza pozycji: zakończona = tyle, ile zapłacono; otwarta = plan albo więcej, jeśli zapłacono już ponad plan */
+function licz() {
+  if (S.calc) return S.calc;
+  const m = new Map();
+  for (const p of pozycje()) m.set(p.id, { p, zapl: 0, n: 0 });
+  for (const pl of platnosci()) { const x = m.get(pl.pozycja); if (x) { x.zapl += pl.kwotaGr || 0; x.n++; } }
+  for (const x of m.values()) {
+    x.plan = x.p.planGr || 0;
+    x.prog = x.p.zakonczona ? x.zapl : Math.max(x.plan, x.zapl);
+    x.zostalo = x.prog - x.zapl;
+    x.ponad = x.plan > 0 && x.zapl > x.plan;
+    x.bezPlanu = !x.plan;
+  }
+  S.calc = m;
+  return m;
+}
+function suma(lista) {
+  const s = { plan: 0, zapl: 0, prog: 0, zostalo: 0, n: 0 };
+  for (const x of lista) { s.plan += x.plan; s.zapl += x.zapl; s.prog += x.prog; s.zostalo += x.zostalo; s.n++; }
+  return s;
+}
+const wykonczenie = () => [...licz().values()].filter((x) => !x.p.zakup);
+const zakup = () => [...licz().values()].filter((x) => x.p.zakup);
 
 /* ---------- komunikaty ---------- */
 let toastT;
@@ -171,30 +172,43 @@ function bladZapisu(e) {
   sync("err", "Nie zapisano"); toast("Nie udało się zapisać. Spróbuj ponownie.");
 }
 
-/* ---------- podsumowanie ---------- */
-function sumy(lista = S.wyd) {
-  const p = {}, k = {}; let wyd = 0, plan = 0;
-  for (const w of lista) {
-    const g = w.kwotaGr || 0, pl = w.status === "do-zaplaty";
-    if (pl) plan += g; else wyd += g;
-    const pk = pom().some((x) => x.id === w.pom) ? w.pom : "";
-    const kk = kat().some((x) => x.id === w.kat) ? w.kat : "";
-    for (const [m, key] of [[p, pk], [k, kk]]) {
-      m[key] ??= { wyd: 0, plan: 0, n: 0 };
-      m[key][pl ? "plan" : "wyd"] += g; m[key].n++;
-    }
-  }
-  return { p, k, wyd, plan };
-}
-function tasma(wyd, plan, budzet, skala) {
-  const max = Math.max(budzet || 0, wyd + plan, skala || 0, 1);
-  const pw = (wyd / max) * 100, ph = (plan / max) * 100;
-  let h = `<div class="tape" role="img" aria-label="Wydane ${zl(wyd)}, do zapłaty ${zl(plan)}${budzet ? ", budżet " + zl(budzet) : ""}">`;
-  if (wyd) h += `<span class="p" style="width:${pw}%"></span>`;
-  if (plan) h += `<span class="h" style="left:calc(${pw}% + ${wyd ? 2 : 0}px);width:max(0px,calc(${ph}% - ${wyd ? 2 : 0}px))"></span>`;
-  if (budzet && wyd + plan > budzet) h += `<span class="lim" style="left:calc(${(budzet / max) * 100}% - 1px)"></span>`;
+/* ---------- elementy wspólne ---------- */
+function tasma(zapl, zostalo, plan, skala) {
+  const max = Math.max(plan || 0, zapl + zostalo, skala || 0, 1);
+  const pw = (zapl / max) * 100, ph = (zostalo / max) * 100;
+  let h = `<div class="tape" role="img" aria-label="Zapłacone ${zl(zapl)}, zostało ${zl(zostalo)}${plan ? ", plan " + zl(plan) : ""}">`;
+  if (zapl) h += `<span class="p" style="width:${pw}%"></span>`;
+  if (zostalo) h += `<span class="h" style="left:calc(${pw}% + ${zapl ? 2 : 0}px);width:max(0px,calc(${ph}% - ${zapl ? 2 : 0}px))"></span>`;
+  if (plan && zapl + zostalo > plan) h += `<span class="lim" style="left:calc(${(plan / max) * 100}% - 1px)"></span>`;
   return h + "</div>";
 }
+function pigulka(x) {
+  if (x.p.zakonczona) return `<span class="pill ok">zakończone</span>`;
+  if (x.ponad) return `<span class="pill bad">ponad plan o ${zl(x.zapl - x.plan)}</span>`;
+  if (x.bezPlanu) return `<span class="pill mut">bez planu</span>`;
+  if (!x.zapl) return `<span class="pill mut">nic nie zapłacono</span>`;
+  return "";
+}
+const legenda = `<div class="overall-legend"><span class="key"><i></i>zapłacone</span><span class="key"><i class="h"></i>zostało do zapłaty</span><span class="key"><i class="l"></i>plan (gdy przekroczony)</span></div>`;
+function opcje(lista, wybrane, pusta, bez) {
+  return (pusta ? `<option value="">${pusta}</option>` : "") + lista.map((x) => `<option value="${esc(x.id)}" ${x.id === wybrane ? "selected" : ""}>${esc(x.nazwa)}</option>`).join("") + (bez ? `<option value="-" ${wybrane === "-" ? "selected" : ""}>${bez}</option>` : "");
+}
+function opcjePoz(wyb) {
+  const o = (p) => `<option value="${esc(p.id)}" ${p.id === wyb ? "selected" : ""}>${esc(p.nazwa)}</option>`;
+  let h = `<option value="">— wybierz pozycję —</option>`;
+  for (const r of pom()) {
+    const ps = pozycje().filter((p) => !p.zakup && p.pom === r.id);
+    if (ps.length) h += `<optgroup label="${esc(r.nazwa)}">${ps.map(o).join("")}</optgroup>`;
+  }
+  const sieroty = pozycje().filter((p) => !p.zakup && !pom().some((r) => r.id === p.pom));
+  if (sieroty.length) h += `<optgroup label="Bez pomieszczenia">${sieroty.map(o).join("")}</optgroup>`;
+  const zk = pozycje().filter((p) => p.zakup);
+  if (zk.length) h += `<optgroup label="Zakup domu">${zk.map(o).join("")}</optgroup>`;
+  return h;
+}
+const wykonawcy = () => [...new Set(platnosci().map((p) => p.gdzie).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
+
+/* ---------- podsumowanie ---------- */
 function niceStep(max) {
   const raw = max / 3, p = Math.pow(10, Math.floor(Math.log10(raw)));
   for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= raw) return m * p;
@@ -202,10 +216,13 @@ function niceStep(max) {
 }
 const krotko = (v) => v >= 1000 ? (Math.round(v / 100) / 10).toLocaleString("pl-PL") + " tys." : f0.format(v) + " zł";
 function wykresMiesieczny() {
-  const zapl = S.wyd.filter((w) => w.status !== "do-zaplaty" && w.data);
-  if (!zapl.length) return `<p class="hint">Wykres pojawi się po dodaniu zapłaconych wydatków z datą.</p>`;
+  const zPoz = new Set(pozycje().filter((p) => !p.zakup).map((p) => p.id));
+  const lista = platnosci().filter((w) => w.data && zPoz.has(w.pozycja));
+  const bezDaty = platnosci().filter((w) => !w.data && zPoz.has(w.pozycja)).reduce((a, w) => a + (w.kwotaGr || 0), 0);
+  const nota = bezDaty ? `<p class="hint" style="margin:10px 0 0">Bez daty (przeniesione z arkusza): ${zl(bezDaty)}, nie ma ich na wykresie.</p>` : "";
+  if (!lista.length) return `<p class="hint" style="margin:0">Wykres pojawi się, gdy dodasz płatności z datą.</p>${nota}`;
   const m = {};
-  for (const w of zapl) { const k = w.data.slice(0, 7); m[k] = (m[k] || 0) + (w.kwotaGr || 0); }
+  for (const w of lista) { const k = w.data.slice(0, 7); m[k] = (m[k] || 0) + (w.kwotaGr || 0); }
   const keys = Object.keys(m).sort();
   let [y, mo] = keys[0].split("-").map(Number);
   const now = new Date(), endY = now.getFullYear(), endM = now.getMonth() + 1;
@@ -222,284 +239,260 @@ function wykresMiesieczny() {
   const cols = pokaz.map((k, i) => {
     const [yy, mm] = k.split("-");
     const tip = `${MIES[+mm - 1]} ${yy}: ${zl(m[k] || 0)}`;
-    const lab = i === imax || i === pokaz.length - 1 ? `<em style="bottom:${(vals[i] / top) * 100}%">${krotko(vals[i])}</em>` : "";
+    const lab = (i === imax || i === pokaz.length - 1) && vals[i] ? `<em style="bottom:${(vals[i] / top) * 100}%">${krotko(vals[i])}</em>` : "";
     return `<div class="c" data-tip="${esc(tip)}">${lab}<b style="height:${(vals[i] / top) * 100}%"></b></div>`;
   }).join("");
   const xl = pokaz.map((k, i) => { const [yy, mm] = k.split("-"); return `<span>${MIES_K[+mm - 1]}${mm === "01" || i === 0 ? " " + yy.slice(2) : ""}</span>`; }).join("");
-  return `<div class="chart-wrap"><div class="chart-inner"><div class="chart"><div class="plot">${gl}<div class="cols">${cols}</div></div><div class="xl">${xl}</div></div></div></div>`;
+  return `<div class="chart-wrap"><div class="chart-inner"><div class="chart"><div class="plot">${gl}<div class="cols">${cols}</div></div><div class="xl">${xl}</div></div></div></div>${nota}`;
 }
-
+function wierszGrupy(attr, id, nazwa, s, skala) {
+  const over = s.plan && s.prog > s.plan;
+  const pill = over ? `<span class="pill bad">prognoza ponad plan o ${zl(s.prog - s.plan)}</span>` : s.zostalo ? `<span class="pill mut">zostało ${zl(s.zostalo)}</span>` : `<span class="pill ok">zapłacone</span>`;
+  return `<button class="row" type="button" ${attr}="${esc(id)}"><span class="n">${esc(nazwa)}</span><span class="a num">${zl(s.zapl)} <span style="color:var(--muted)">/ ${zl(s.plan)}</span></span>
+    ${tasma(s.zapl, s.zostalo, s.plan, skala)}<span class="m"><span>${s.n} poz.</span>${pill}</span></button>`;
+}
 function renderPodsumowanie() {
   const el = $("#v-podsumowanie");
-  if (!S.wydLoaded) { el.innerHTML = `<div class="banner">Wczytywanie danych z GitHuba…</div>`; return; }
-  const s = sumy();
-  const budzet = pom().reduce((a, p) => a + (p.budzetGr || 0), 0);
-  const zostaje = budzet - s.wyd - s.plan;
-  const proc = budzet ? Math.round(((s.wyd + s.plan) / budzet) * 100) : null;
+  if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie danych z GitHuba…</div>`; return; }
+  const w = wykonczenie(), s = suma(w), sz = suma(zakup());
+  const roznica = s.prog - s.plan;
   let h = `<div class="kpis">
-    <div class="kpi"><span class="lbl">Budżet</span><span class="v num">${budzet ? zl(budzet) : "—"}</span><span class="d">${budzet ? "suma budżetów pomieszczeń" : `<button class="btn link" data-go="ustawienia" type="button">Ustaw budżet</button>`}</span></div>
-    <div class="kpi"><span class="lbl">Wydane</span><span class="v num">${zl(s.wyd)}</span><span class="d">${S.wyd.filter((w) => w.status !== "do-zaplaty").length} pozycji zapłaconych</span></div>
-    <div class="kpi"><span class="lbl">Do zapłaty</span><span class="v num">${zl(s.plan)}</span><span class="d">wyceny, zaliczki, umówione</span></div>
-    <div class="kpi"><span class="lbl">Zostaje</span><span class="v num ${zostaje < 0 ? "neg" : ""}">${budzet ? zl(zostaje) : "—"}</span><span class="d">${budzet ? (zostaje < 0 ? `ponad budżet o ${zl(-zostaje)}` : `wykorzystane ${proc}% budżetu`) : "po ustawieniu budżetu"}</span></div>
+    <div class="kpi"><span class="lbl">Plan wykończenia</span><span class="v num">${zl(s.plan)}</span><span class="d">${s.n} pozycji</span></div>
+    <div class="kpi"><span class="lbl">Zapłacone</span><span class="v num">${zl(s.zapl)}</span><span class="d">${s.plan ? Math.round((s.zapl / s.plan) * 100) + "% planu" : "&nbsp;"}</span></div>
+    <div class="kpi"><span class="lbl">Zostało do zapłaty</span><span class="v num">${zl(s.zostalo)}</span><span class="d">według planu pozycji</span></div>
+    <div class="kpi"><span class="lbl">Prognoza</span><span class="v num ${roznica > 0 ? "neg" : ""}">${zl(s.prog)}</span><span class="d">${roznica > 0 ? `ponad plan o ${zl(roznica)}` : roznica < 0 ? `poniżej planu o ${zl(-roznica)}` : "równo z planem"}</span></div>
   </div>`;
-  if (!S.wyd.length) {
-    h += `<div class="panel empty"><h3>Jeszcze nic tu nie ma</h3><p>Dodaj pierwszy wydatek przyciskiem na dole albo przenieś dane z Google Sheets w zakładce „Budżet i listy”.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn pri" type="button" data-add>+ Dodaj wydatek</button><button class="btn" type="button" data-go="ustawienia">Import z arkusza</button></div></div>`;
-    el.innerHTML = h; return;
+  if (!s.n) {
+    el.innerHTML = h + `<div class="panel empty"><h3>Brak pozycji</h3><p>Dodaj pierwszą pozycję, np. „Meble kuchnia” z planowaną kwotą, a potem podpinaj pod nią płatności.</p><button class="btn pri" type="button" data-nowa-poz>+ Nowa pozycja</button></div>`;
+    return;
   }
-  h += `<div class="panel overall"><div class="lbl">Cały dom${budzet ? ` · budżet ${zl(budzet)}` : ""}</div>${tasma(s.wyd, s.plan, budzet)}
-    <div class="overall-legend"><span class="key"><i></i>zapłacone</span><span class="key"><i class="h"></i>do zapłaty</span><span class="key"><i class="l"></i>granica budżetu (gdy przekroczona)</span><span>Każda kreska miarki to 10% skali.</span></div></div>`;
+  h += `<div class="panel overall"><div class="lbl">Wykończenie · prognoza ${zl(s.prog)}${sz.n ? ` · razem z zakupem domu ${zl(s.prog + sz.zapl)}` : ""}</div>${tasma(s.zapl, s.zostalo, s.plan)}${legenda}</div>`;
 
-  const maxPom = Math.max(...Object.values(s.p).map((x) => x.wyd + x.plan), 1);
-  const wiersze = pom().map((p) => ({ id: p.id, nm: p.nazwa, b: p.budzetGr || 0, ...(s.p[p.id] || { wyd: 0, plan: 0, n: 0 }) }));
-  if (s.p[""]) wiersze.push({ id: "", nm: "Bez pomieszczenia", b: 0, ...s.p[""] });
-  wiersze.sort((a, b) => (b.wyd + b.plan) - (a.wyd + a.plan) || b.b - a.b);
-  const rp = wiersze.filter((w) => w.n || w.b).map((w) => {
-    const suma = w.wyd + w.plan, over = w.b && suma > w.b;
-    const status = !w.b ? `<span class="pill mut">bez budżetu</span>` : over ? `<span class="pill bad">ponad o ${zl(suma - w.b)}</span>` : suma / w.b > 0.85 ? `<span class="pill warn">zostało ${zl(w.b - suma)}</span>` : `<span class="pill ok">zostało ${zl(w.b - suma)}</span>`;
-    return `<button class="row" type="button" data-fpom="${esc(w.id)}"><span class="n">${esc(w.nm)}</span><span class="a num">${zl(suma)}${w.b ? ` <span style="color:var(--muted)">/ ${zl(w.b)}</span>` : ""}</span>
-      ${tasma(w.wyd, w.plan, w.b, w.b ? 0 : maxPom)}<span class="m"><span>${w.n} poz.${w.plan ? ` · do zapłaty ${zl(w.plan)}` : ""}</span>${status}</span></button>`;
-  }).join("");
+  const grupy = (klucz, lista) => {
+    const g = new Map();
+    for (const x of w) { const k = lista.some((r) => r.id === x.p[klucz]) ? x.p[klucz] : ""; if (!g.has(k)) g.set(k, []); g.get(k).push(x); }
+    return [...g.entries()].map(([id, xs]) => ({ id, s: suma(xs) })).sort((a, b) => b.s.prog - a.s.prog);
+  };
+  const gp = grupy("pom", pom()), gk = grupy("kat", kat());
+  const maxP = Math.max(...gp.map((g) => g.s.prog), 1), maxK = Math.max(...gk.map((g) => g.s.prog), 1);
+  h += `<div class="grid2">
+    <div class="panel"><h2>Pomieszczenia</h2><div class="rows">${gp.map((g) => wierszGrupy("data-fpom", g.id || "-", g.id ? nazwaPom(g.id) : "Bez pomieszczenia", g.s, maxP)).join("")}</div></div>
+    <div class="panel"><h2>Kategorie</h2><div class="rows">${gk.map((g) => wierszGrupy("data-fkat", g.id || "-", g.id ? nazwaKat(g.id) : "Bez kategorii", g.s, maxK)).join("")}</div></div>
+  </div>`;
 
-  const kw = Object.entries(s.k).map(([id, v]) => ({ id, nm: id ? nazwaKat(id) : "Bez kategorii", ...v })).sort((a, b) => (b.wyd + b.plan) - (a.wyd + a.plan));
-  const maxK = Math.max(...kw.map((k) => k.wyd + k.plan), 1), tot = s.wyd + s.plan || 1;
-  const rk = kw.map((k) => `<button class="row" type="button" data-fkat="${esc(k.id)}"><span class="n">${esc(k.nm)}</span><span class="a num">${zl(k.wyd + k.plan)} <span style="color:var(--muted)">${Math.round(((k.wyd + k.plan) / tot) * 100)}%</span></span>${tasma(k.wyd, k.plan, 0, maxK)}</button>`).join("");
-
-  h += `<div class="grid2"><div class="panel"><h2>Pomieszczenia</h2><div class="rows">${rp}</div></div>
-    <div class="panel"><h2>Kategorie</h2><div class="rows">${rk}</div></div></div>
-    <div class="panel"><h2>Zapłacone w miesiącach</h2>${wykresMiesieczny()}</div>`;
-  const najw = [...S.wyd].sort((a, b) => (b.kwotaGr || 0) - (a.kwotaGr || 0)).slice(0, 5);
-  h += `<div class="panel"><h2>Największe pozycje</h2>${najw.map(wierszWyd).join("")}</div>`;
+  const uwagi = w.filter((x) => !x.p.zakonczona && (x.ponad || (x.bezPlanu && x.zapl))).sort((a, b) => b.zapl - a.zapl);
+  const wyk = new Map();
+  for (const pl of platnosci()) if (pl.gdzie && !poz(pl.pozycja)?.zakup) wyk.set(pl.gdzie, (wyk.get(pl.gdzie) || 0) + (pl.kwotaGr || 0));
+  const wykL = [...wyk.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  h += `<div class="grid2">
+    <div class="panel"><h2>Wymaga uwagi</h2>${uwagi.length ? `<div class="rows">${uwagi.map((x) => `<button class="row" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span><span class="a num">${zl(x.zapl)}</span><span class="m"><span>${esc(nazwaPom(x.p.pom))}</span>${pigulka(x)}</span></button>`).join("")}</div><p class="hint" style="margin:8px 0 0">Pozycje bez planu podnoszą prognozę. Wpisz im plan albo oznacz jako zakończone.</p>` : `<p class="hint" style="margin:0">Wszystkie pozycje mieszczą się w planie.</p>`}</div>
+    <div class="panel"><h2>Wykonawcy i sklepy</h2>${wykL.length ? `<div class="rows">${wykL.map(([g, k]) => `<button class="row" type="button" data-fgdzie="${esc(g)}"><span class="n">${esc(g)}</span><span class="a num">${zl(k)}</span></button>`).join("")}</div>` : `<p class="hint" style="margin:0">Pojawią się, gdy przy płatnościach wpiszesz sklep albo wykonawcę.</p>`}</div>
+  </div>`;
+  h += `<div class="panel"><h2>Płatności w miesiącach</h2>${wykresMiesieczny()}</div>`;
+  if (sz.n) h += `<div class="panel"><h2>Zakup domu</h2><div class="rows">${zakup().map((x) => `<button class="row" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span><span class="a num">${zl(x.zapl)}</span></button>`).join("")}</div><p class="hint" style="margin:8px 0 0">Razem <strong class="num">${zl(sz.zapl)}</strong>. Nie wlicza się do budżetu wykończenia.</p></div>`;
   el.innerHTML = h;
 }
 
-/* ---------- lista wydatków ---------- */
-function wierszWyd(w) {
-  const pl = w.status === "do-zaplaty";
-  const meta = [nazwaPom(w.pom), nazwaKat(w.kat), w.gdzie].filter(Boolean).map(esc).join(" · ");
-  return `<button class="wyd" type="button" data-id="${esc(w.id)}"><span class="dt num">${dataPL(w.data)}</span>
-    <span class="o"><span class="t">${esc(w.opis || "(bez opisu)")}</span><span class="mm"><span>${meta}</span>${pl ? `<span class="pill warn">do zapłaty</span>` : ""}${w.pliki?.length ? `<span title="Załączniki">📎 ${w.pliki.length}</span>` : ""}</span></span>
-    <span class="k num ${pl ? "plan" : ""}">${zl2(w.kwotaGr)}</span></button>`;
+/* ---------- pozycje ---------- */
+function filtrPoz() {
+  const f = S.fp, q = f.q.trim().toLowerCase();
+  return [...licz().values()].filter((x) =>
+    (!f.pom || (f.pom === "-" ? !pom().some((r) => r.id === x.p.pom) : x.p.pom === f.pom)) &&
+    (!f.kat || (f.kat === "-" ? !kat().some((k) => k.id === x.p.kat) : x.p.kat === f.kat)) &&
+    (!f.stan || (f.stan === "otwarte" ? !x.p.zakonczona && x.zostalo > 0 : f.stan === "zakonczone" ? x.p.zakonczona : f.stan === "ponad" ? x.ponad : f.stan === "bezplanu" ? x.bezPlanu : true)) &&
+    (!q || [x.p.nazwa, x.p.notatka, nazwaPom(x.p.pom), nazwaKat(x.p.kat)].join(" ").toLowerCase().includes(q)));
 }
-function filtrowane() {
-  const q = S.f.q.trim().toLowerCase();
-  return S.wyd.filter((w) =>
-    (!S.f.pom || (S.f.pom === "-" ? !pom().some((p) => p.id === w.pom) : w.pom === S.f.pom)) &&
-    (!S.f.kat || (S.f.kat === "-" ? !kat().some((k) => k.id === w.kat) : w.kat === S.f.kat)) &&
-    (!S.f.st || (S.f.st === "do-zaplaty" ? w.status === "do-zaplaty" : w.status !== "do-zaplaty")) &&
-    (!q || [w.opis, w.gdzie, w.notatka, nazwaPom(w.pom), nazwaKat(w.kat)].join(" ").toLowerCase().includes(q))
-  ).sort((a, b) => (b.data || "").localeCompare(a.data || "") || (b.utworzono || "").localeCompare(a.utworzono || ""));
+function wierszPoz(x) {
+  return `<button class="row poz" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span>
+    <span class="a num">${zl(x.zapl)}${x.plan ? ` <span style="color:var(--muted)">/ ${zl(x.plan)}</span>` : ""}</span>
+    ${tasma(x.zapl, x.zostalo, x.plan)}
+    <span class="m"><span>${esc(nazwaKat(x.p.kat))} · ${x.n} ${x.n === 1 ? "płatność" : "płatności"}${x.zostalo && !x.p.zakonczona ? ` · zostało ${zl(x.zostalo)}` : ""}</span>${pigulka(x)}</span></button>`;
 }
-function opcje(lista, wybrane, pusta, bez) {
-  return (pusta ? `<option value="">${pusta}</option>` : "") + lista.map((x) => `<option value="${esc(x.id)}" ${x.id === wybrane ? "selected" : ""}>${esc(x.nazwa)}</option>`).join("") + (bez ? `<option value="-" ${wybrane === "-" ? "selected" : ""}>${bez}</option>` : "");
+function renderPozycje() {
+  const f = S.fp;
+  $("#fp-pom").innerHTML = opcje(pom(), f.pom, "Wszystkie pomieszczenia", "Bez pomieszczenia");
+  $("#fp-kat").innerHTML = opcje(kat(), f.kat, "Wszystkie kategorie", "Bez kategorii");
+  $("#fp-stan").value = f.stan;
+  if ($("#fp-q") !== document.activeElement) $("#fp-q").value = f.q;
+  $("#fp-clear").hidden = !(f.q || f.pom || f.kat || f.stan);
+  const el = $("#lista-poz");
+  if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie…</div>`; return; }
+  const l = filtrPoz(), sw = suma(l.filter((x) => !x.p.zakup));
+  $("#fp-sum").innerHTML = `<span>${l.length} z ${pozycje().length} pozycji</span><span>zapłacone <strong class="num">${zl(sw.zapl)}</strong> z planu <strong class="num">${zl(sw.plan)}</strong></span>`;
+  if (!l.length) { el.innerHTML = `<div class="panel empty"><h3>${pozycje().length ? "Nic nie pasuje do filtrów" : "Brak pozycji"}</h3><p>${pozycje().length ? "Zmień filtry albo wyczyść wyszukiwanie." : "Dodaj pierwszą pozycję przyciskiem powyżej."}</p></div>`; return; }
+  const grupy = [];
+  for (const r of pom()) { const xs = l.filter((x) => !x.p.zakup && x.p.pom === r.id); if (xs.length) grupy.push([r.nazwa, xs]); }
+  const sieroty = l.filter((x) => !x.p.zakup && !pom().some((r) => r.id === x.p.pom)); if (sieroty.length) grupy.push(["Bez pomieszczenia", sieroty]);
+  const zk = l.filter((x) => x.p.zakup); if (zk.length) grupy.push(["Zakup domu", zk]);
+  el.innerHTML = grupy.map(([n, xs]) => { const s = suma(xs); return `<div class="month"><div class="month-h"><span class="t">${esc(n)}</span><span class="s num">${zl(s.zapl)}${s.plan ? ` / ${zl(s.plan)}` : ""}</span></div><div class="rows">${xs.map(wierszPoz).join("")}</div></div>`; }).join("");
 }
-function renderWydatki() {
-  $("#f-pom-f").innerHTML = opcje(pom(), S.f.pom, "Wszystkie pomieszczenia", "Bez pomieszczenia");
-  $("#f-kat-f").innerHTML = opcje(kat(), S.f.kat, "Wszystkie kategorie", "Bez kategorii");
-  $("#f-st-f").value = S.f.st;
-  if ($("#q") !== document.activeElement) $("#q").value = S.f.q;
-  $("#f-clear").hidden = !(S.f.q || S.f.pom || S.f.kat || S.f.st);
-  const list = $("#list");
-  if (!S.wydLoaded) { list.innerHTML = `<div class="banner">Wczytywanie…</div>`; return; }
-  const l = filtrowane(), s = sumy(l);
-  $("#fsum").innerHTML = `<span>${l.length} z ${S.wyd.length} pozycji</span><span>zapłacone <strong class="num">${zl2(s.wyd)}</strong>${s.plan ? ` · do zapłaty <strong class="num">${zl2(s.plan)}</strong>` : ""}</span>`;
-  if (!l.length) {
-    list.innerHTML = S.wyd.length ? `<div class="panel empty"><h3>Nic nie pasuje do filtrów</h3><p>Zmień filtry albo wyczyść wyszukiwanie.</p></div>`
-      : `<div class="panel empty"><h3>Brak wydatków</h3><p>Dodaj pierwszy wydatek albo zaimportuj dane z Google Sheets w zakładce „Budżet i listy”.</p></div>`;
-    return;
-  }
-  const grupy = new Map();
-  for (const w of l) { const k = w.data ? w.data.slice(0, 7) : "brak"; if (!grupy.has(k)) grupy.set(k, []); grupy.get(k).push(w); }
-  let h = "";
-  for (const [k, ws] of grupy) {
-    const gs = sumy(ws);
-    const t = k === "brak" ? "Bez daty" : `${MIES[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
-    h += `<div class="month"><div class="month-h"><span class="t">${t}</span><span class="s num">${zl2(gs.wyd)}${gs.plan ? ` + ${zl2(gs.plan)} do zapłaty` : ""}</span></div>${ws.map(wierszWyd).join("")}</div>`;
-  }
-  list.innerHTML = h;
+
+/* ---------- płatności ---------- */
+function filtrPl() {
+  const f = S.fl, q = f.q.trim().toLowerCase();
+  return platnosci().filter((pl) => {
+    const p = poz(pl.pozycja);
+    return (!f.pom || (p && !p.zakup && (f.pom === "-" ? !pom().some((r) => r.id === p.pom) : p.pom === f.pom))) &&
+      (!f.gdzie || pl.gdzie === f.gdzie) &&
+      (!q || [pl.opis, pl.gdzie, pl.notatka, p?.nazwa].join(" ").toLowerCase().includes(q));
+  }).sort((a, b) => (b.data || "").localeCompare(a.data || "") || (b.utworzono || "").localeCompare(a.utworzono || ""));
+}
+function wierszPl(pl) {
+  const p = poz(pl.pozycja);
+  const meta = [p ? (p.zakup ? "Zakup domu" : nazwaPom(p.pom)) : "Bez pozycji", pl.gdzie].filter(Boolean).map(esc).join(" · ");
+  return `<button class="wyd" type="button" data-pl="${esc(pl.id)}"><span class="dt num">${dataPL(pl.data)}</span>
+    <span class="o"><span class="t">${esc(pl.opis || p?.nazwa || "(bez opisu)")}</span><span class="mm"><span>${pl.opis && p ? esc(p.nazwa) + " · " : ""}${meta}</span>${pl.pliki?.length ? `<span title="Załączniki">📎 ${pl.pliki.length}</span>` : ""}</span></span>
+    <span class="k num">${zl2(pl.kwotaGr)}</span></button>`;
+}
+function renderPlatnosci() {
+  const f = S.fl;
+  $("#fl-pom").innerHTML = opcje(pom(), f.pom, "Wszystkie pomieszczenia", "Bez pomieszczenia");
+  $("#fl-gdzie").innerHTML = `<option value="">Wszyscy wykonawcy i sklepy</option>` + wykonawcy().map((g) => `<option ${g === f.gdzie ? "selected" : ""}>${esc(g)}</option>`).join("");
+  if ($("#fl-q") !== document.activeElement) $("#fl-q").value = f.q;
+  $("#fl-clear").hidden = !(f.q || f.pom || f.gdzie);
+  const el = $("#lista-pl");
+  if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie…</div>`; return; }
+  const l = filtrPl(), razem = l.reduce((a, p) => a + (p.kwotaGr || 0), 0);
+  $("#fl-sum").innerHTML = `<span>${l.length} z ${platnosci().length} płatności</span><span>razem <strong class="num">${zl2(razem)}</strong></span>`;
+  if (!l.length) { el.innerHTML = `<div class="panel empty"><h3>${platnosci().length ? "Nic nie pasuje do filtrów" : "Brak płatności"}</h3><p>${platnosci().length ? "Zmień filtry albo wyczyść wyszukiwanie." : "Dodaj płatność przyciskiem na dole."}</p></div>`; return; }
+  const g = new Map();
+  for (const pl of l) { const k = pl.data ? pl.data.slice(0, 7) : "brak"; if (!g.has(k)) g.set(k, []); g.get(k).push(pl); }
+  el.innerHTML = [...g.entries()].map(([k, ps]) => {
+    const t = k === "brak" ? "Bez daty · przeniesione z arkusza" : `${MIES[+k.slice(5) - 1]} ${k.slice(0, 4)}`;
+    return `<div class="month"><div class="month-h"><span class="t">${t}</span><span class="s num">${zl2(ps.reduce((a, p) => a + (p.kwotaGr || 0), 0))}</span></div>${ps.map(wierszPl).join("")}</div>`;
+  }).join("");
 }
 
 /* ---------- ustawienia ---------- */
 function renderUstawienia(force) {
   const el = $("#v-ustawienia");
-  if (!force && el.contains(document.activeElement) && document.activeElement.matches("input[type=text],input:not([type]),textarea")) return;
-  if (!S.ustLoaded) { el.innerHTML = `<div class="banner">Wczytywanie…</div>`; return; }
-  const s = sumy();
-  const ask = (typ, id, n) => {
+  if (!force && el.contains(document.activeElement) && document.activeElement.matches("input[type=text],input:not([type])")) return;
+  if (!S.gotowe) { el.innerHTML = `<div class="banner">Wczytywanie…</div>`; return; }
+  const ile = (pole, id) => pozycje().filter((p) => p[pole] === id).length;
+  const ask = (typ, id) => {
     if (S.usuwanie?.typ !== typ || S.usuwanie.id !== id) return "";
-    const lista = typ === "pom" ? pom() : kat();
-    if (!n) return `<div class="ask">Usunąć tę pozycję? <button class="btn danger" type="button" data-del-ok>Usuń</button><button class="btn" type="button" data-del-no>Nie</button></div>`;
-    return `<div class="ask">${n} wydatków ma tę pozycję. Przenieś je do: <select class="ctl" id="u-move">${opcje(lista.filter((x) => x.id !== id), "")}</select><button class="btn danger" type="button" data-del-ok>Przenieś i usuń</button><button class="btn" type="button" data-del-no>Anuluj</button></div>`;
+    const n = ile(typ, id), lista = typ === "pom" ? pom() : kat();
+    if (!n) return `<div class="ask">Usunąć? <button class="btn danger" type="button" data-del-ok>Usuń</button><button class="btn" type="button" data-del-no>Nie</button></div>`;
+    return `<div class="ask">${n} pozycji ma tę wartość. Przenieś je do: <select class="ctl" id="u-move">${opcje(lista.filter((x) => x.id !== id), "")}</select><button class="btn danger" type="button" data-del-ok>Przenieś i usuń</button><button class="btn" type="button" data-del-no>Anuluj</button></div>`;
   };
-  const budzet = pom().reduce((a, p) => a + (p.budzetGr || 0), 0);
+  const lista = (typ, items) => `<div class="slist">${items.map((x) => `<div class="srow k">
+      <input class="ctl" type="text" value="${esc(x.nazwa)}" data-u="${typ}" data-id="${esc(x.id)}" aria-label="Nazwa">
+      <button class="btn link" type="button" data-u-del="${typ}" data-id="${esc(x.id)}">usuń <span class="cnt">(${ile(typ, x.id)})</span></button>
+      ${ask(typ, x.id)}</div>`).join("")}</div>`;
   const repoUrl = `https://github.com/${REPO_DANE.owner}/${REPO_DANE.repo}`;
   el.innerHTML = `
   <div class="grid2">
-    <div class="panel stack">
-      <div><h2>Pomieszczenia i budżety</h2><p class="hint" style="margin:0">Budżet całego domu to suma budżetów pomieszczeń: <strong class="num">${zl(budzet)}</strong>. Wydatki na cały dom (np. elektryka, transport) zapisuj w „Cały dom”.</p></div>
-      <div class="slist">${pom().map((p) => `<div class="srow">
-        <input class="ctl" type="text" value="${esc(p.nazwa)}" data-u="pom-n" data-id="${esc(p.id)}" aria-label="Nazwa pomieszczenia">
-        <input class="ctl num" type="text" inputmode="decimal" value="${p.budzetGr ? f0.format(p.budzetGr / 100) : ""}" placeholder="budżet zł" data-u="pom-b" data-id="${esc(p.id)}" aria-label="Budżet ${esc(p.nazwa)}">
-        <button class="btn link" type="button" data-u-del="pom" data-id="${esc(p.id)}" aria-label="Usuń ${esc(p.nazwa)}">usuń</button>
-        ${ask("pom", p.id, s.p[p.id]?.n || 0)}</div>`).join("")}</div>
-      <form class="srow k" id="u-add-pom"><input class="ctl" type="text" id="u-new-pom" placeholder="Nowe pomieszczenie, np. Garderoba" aria-label="Nowe pomieszczenie"><button class="btn" type="submit">Dodaj</button></form>
-    </div>
-    <div class="panel stack">
-      <div><h2>Kategorie</h2><p class="hint" style="margin:0">Stała lista zamiast wpisywania z ręki, żeby te same rzeczy zawsze lądowały w jednym miejscu.</p></div>
-      <div class="slist">${kat().map((k) => `<div class="srow k">
-        <input class="ctl" type="text" value="${esc(k.nazwa)}" data-u="kat-n" data-id="${esc(k.id)}" aria-label="Nazwa kategorii">
-        <button class="btn link" type="button" data-u-del="kat" data-id="${esc(k.id)}" aria-label="Usuń ${esc(k.nazwa)}">usuń</button>
-        ${ask("kat", k.id, s.k[k.id]?.n || 0)}</div>`).join("")}</div>
-      <form class="srow k" id="u-add-kat"><input class="ctl" type="text" id="u-new-kat" placeholder="Nowa kategoria" aria-label="Nowa kategoria"><button class="btn" type="submit">Dodaj</button></form>
-    </div>
+    <div class="panel stack"><div><h2>Pomieszczenia</h2><p class="hint" style="margin:0">Budżet pomieszczenia to suma planów jego pozycji. Rzeczy na cały dom (podłogi, drzwi, elektryka) trzymaj w „Cały dom”.</p></div>
+      ${lista("pom", pom())}
+      <form class="srow k" id="u-add-pom"><input class="ctl" type="text" placeholder="Nowe pomieszczenie" aria-label="Nowe pomieszczenie"><button class="btn" type="submit">Dodaj</button></form></div>
+    <div class="panel stack"><div><h2>Kategorie</h2><p class="hint" style="margin:0">Rodzaj prac lub zakupów. Pozwala zobaczyć np. ile łącznie idzie na meble we wszystkich pomieszczeniach.</p></div>
+      ${lista("kat", kat())}
+      <form class="srow k" id="u-add-kat"><input class="ctl" type="text" placeholder="Nowa kategoria" aria-label="Nowa kategoria"><button class="btn" type="submit">Dodaj</button></form></div>
   </div>
-  ${renderImport()}
   <div class="panel stack">
-    <div><h2>Kopia i historia</h2><p class="hint" style="margin:0">Każdy zapis to osobna wersja w prywatnym repozytorium <a href="${repoUrl}/commits/${REPO_DANE.branch}" target="_blank" rel="noopener">${REPO_DANE.repo}</a>, więc każdą zmianę da się podejrzeć i cofnąć. CSV otworzysz w Excelu i Google Sheets.</p></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="u-export" ${S.wyd.length ? "" : "disabled"}>Pobierz CSV (${S.wyd.length} poz.)</button><button class="btn" type="button" id="u-logout">Wyloguj to urządzenie</button></div>
+    <div><h2>Kopia i historia</h2><p class="hint" style="margin:0">Każdy zapis to osobna wersja w prywatnym repozytorium <a href="${repoUrl}/commits/${REPO_DANE.branch}" target="_blank" rel="noopener">${REPO_DANE.repo}</a>, więc każdą zmianę da się podejrzeć i cofnąć. Pliki CSV otworzysz w Excelu i Google Sheets.</p></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="u-csv-poz">CSV: pozycje</button><button class="btn" type="button" id="u-csv-pl">CSV: płatności</button><button class="btn" type="button" id="u-logout">Wyloguj to urządzenie</button></div>
   </div>`;
 }
-
-/* ---------- import z arkusza ---------- */
-const POLA = [["", "— pomiń —"], ["data", "Data"], ["opis", "Opis"], ["kwota", "Kwota"], ["pom", "Pomieszczenie"], ["kat", "Kategoria"], ["gdzie", "Sklep / wykonawca"], ["status", "Status"], ["notatka", "Notatka"]];
-const ROZPOZNAJ = [["data", /^(data|dzie[nń]|kiedy|date)/i], ["kwota", /(kwota|cena|koszt|warto|suma|brutto|zap[lł]acono|z[lł]$|pln)/i], ["pom", /(pomieszcz|pok[oó]j|miejsce|strefa|gdzie w domu)/i], ["kat", /(kategor|rodzaj|typ|bran[zż])/i], ["gdzie", /(sklep|firma|wykonawca|dostawca|komu|kto|ekipa|sprzedawca)/i], ["status", /(status|op[lł]acon|stan)/i], ["notatka", /(uwag|notat|komentarz|info)/i], ["opis", /(opis|nazwa|co|pozycja|produkt|tytu|czego|przedmiot)/i]];
-function parseTabela(txt) {
-  txt = txt.replace(/\r\n?/g, "\n").replace(/\n+$/, "");
-  const first = txt.split("\n")[0];
-  const sep = first.includes("\t") ? "\t" : first.split(";").length > first.split(",").length ? ";" : ",";
-  const rows = []; let row = [], cell = "", q = false;
-  for (let i = 0; i < txt.length; i++) {
-    const c = txt[i];
-    if (q) { if (c === '"' && txt[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; }
-    else if (c === '"' && cell === "") q = true;
-    else if (c === sep) { row.push(cell); cell = ""; }
-    else if (c === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
-    else cell += c;
-  }
-  row.push(cell); rows.push(row);
-  return rows.filter((r) => r.some((c) => c.trim()));
-}
-function zgadnijMape(rows) {
-  const ncol = Math.max(...rows.map((r) => r.length));
-  const head = rows[0].map((c) => c.trim());
-  const mapa = Array(ncol).fill(""), uzyte = new Set();
-  let naglowek = false;
-  head.forEach((h, i) => { for (const [pole, re] of ROZPOZNAJ) if (!uzyte.has(pole) && h && re.test(h)) { mapa[i] = pole; uzyte.add(pole); naglowek = true; break; } });
-  if (!naglowek) {
-    for (let i = 0; i < ncol; i++) {
-      const v = rows.slice(0, 10).map((r) => (r[i] || "").trim()).filter(Boolean);
-      if (!v.length) continue;
-      if (!uzyte.has("data") && v.every((x) => parseData(x))) { mapa[i] = "data"; uzyte.add("data"); }
-      else if (!uzyte.has("kwota") && v.every((x) => parseKwota(x) !== null)) { mapa[i] = "kwota"; uzyte.add("kwota"); }
-      else if (!uzyte.has("opis")) { mapa[i] = "opis"; uzyte.add("opis"); }
-    }
-  }
-  return { mapa, naglowek, ncol };
-}
-const znajdz = (lista, nazwa) => lista.find((x) => x.nazwa.trim().toLowerCase() === nazwa.trim().toLowerCase());
-function przygotujImport() {
-  const { rows, mapa, naglowek } = S.imp;
-  const dane = naglowek ? rows.slice(1) : rows;
-  const nowePom = new Set(), noweKat = new Set();
-  const out = []; let pominiete = 0, suma = 0;
-  for (const r of dane) {
-    const v = (pole) => { const i = mapa.indexOf(pole); return i < 0 ? "" : (r[i] || "").trim(); };
-    const kw = parseKwota(v("kwota"));
-    if (kw === null || kw === 0) { pominiete++; continue; }
-    const pn = v("pom"), kn = v("kat"), st = v("status");
-    if (pn && !znajdz(pom(), pn)) nowePom.add(pn);
-    if (kn && !znajdz(kat(), kn)) noweKat.add(kn);
-    suma += kw;
-    out.push({ data: parseData(v("data")), opis: v("opis"), kwotaGr: kw, pomN: pn, katN: kn, gdzie: v("gdzie"), notatka: v("notatka"),
-      status: /(nie|do zap|plan|wycen|zaliczk|umówion|umowion)/i.test(st) ? "do-zaplaty" : "zaplacone" });
-  }
-  return { out, pominiete, suma, nowePom: [...nowePom], noweKat: [...noweKat] };
-}
-function renderImport() {
-  let h = `<div class="panel stack imp"><div><h2>Przenieś dane z Google Sheets</h2>
-    <p class="hint" style="margin:0">W arkuszu zaznacz wiersze razem z nagłówkiem (np. kliknij lewy górny róg tabeli), skopiuj Ctrl+C i wklej poniżej. Działa też tekst z pliku CSV.</p></div>`;
-  if (!S.imp) {
-    h += `<textarea class="ctl" id="imp-txt" placeholder="Data	Opis	Kwota	Pomieszczenie	Kategoria	Sklep" aria-label="Dane z arkusza"></textarea><div><button class="btn pri" type="button" id="imp-czytaj">Wczytaj</button></div>`;
-    return h + "</div>";
-  }
-  const { rows, mapa, naglowek, ncol } = S.imp;
-  const p = przygotujImport();
-  const pokaz = (naglowek ? rows.slice(1) : rows).slice(0, 6);
-  h += `<div class="tbl-wrap"><table class="tbl"><thead><tr>${Array.from({ length: ncol }, (_, i) => `<th><select class="ctl" data-imp-col="${i}" aria-label="Kolumna ${i + 1}">${POLA.map(([v, n]) => `<option value="${v}" ${mapa[i] === v ? "selected" : ""}>${n}</option>`).join("")}</select>${naglowek ? `<div class="hint">${esc(rows[0][i] || "")}</div>` : ""}</th>`).join("")}</tr></thead>
-    <tbody>${pokaz.map((r) => `<tr>${Array.from({ length: ncol }, (_, i) => `<td>${esc(r[i] || "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
-    <label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="imp-nagl" ${naglowek ? "checked" : ""}> Pierwszy wiersz to nagłówki</label>
-    <div class="banner"><strong>${p.out.length}</strong> wydatków na łącznie <strong class="num">${zl2(p.suma)}</strong>${p.pominiete ? ` · pominięte ${p.pominiete} wierszy bez kwoty (np. sumy lub puste)` : ""}
-    ${p.nowePom.length ? `<br>Nowe pomieszczenia: ${p.nowePom.map(esc).join(", ")}` : ""}${p.noweKat.length ? `<br>Nowe kategorie: ${p.noweKat.map(esc).join(", ")}` : ""}
-    ${!mapa.includes("kwota") ? `<br><span class="err">Wskaż, która kolumna to kwota.</span>` : ""}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn pri" type="button" id="imp-go" ${!p.out.length || S.importuje ? "disabled" : ""}>Importuj ${p.out.length} wydatków</button><button class="btn" type="button" id="imp-anuluj" ${S.importuje ? "disabled" : ""}>Anuluj</button></div>`;
-  return h + "</div>";
-}
-async function wykonajImport() {
-  const p = przygotujImport();
-  if (!p.out.length) return;
-  S.importuje = true; renderUstawienia(true);
-  const teraz = new Date().toISOString();
-  try {
-    await zmien(`Import z arkusza: ${p.out.length} wydatków`, (d) => {
-      const u = d.ustawienia;
-      for (const n of p.nowePom) if (!znajdz(u.pomieszczenia, n)) u.pomieszczenia.push({ id: noweId(u.pomieszczenia, n), nazwa: n, budzetGr: 0 });
-      for (const n of p.noweKat) if (!znajdz(u.kategorie, n)) u.kategorie.push({ id: noweId(u.kategorie, n), nazwa: n });
-      const domPom = u.pomieszczenia.find((x) => x.id === "caly-dom")?.id || "";
-      for (const w of p.out) d.wydatki.push({ id: losoweId(), data: w.data, opis: w.opis, kwotaGr: w.kwotaGr,
-        pom: w.pomN ? znajdz(u.pomieszczenia, w.pomN).id : domPom, kat: w.katN ? znajdz(u.kategorie, w.katN).id : "",
-        gdzie: w.gdzie, status: w.status, notatka: w.notatka, pliki: [], utworzono: teraz, zrodlo: "import" });
-    });
-    S.imp = null; toast(`Zaimportowano ${p.out.length} wydatków.`);
-  } catch (e) { bladZapisu(e); }
-  S.importuje = false; renderUstawienia(true);
-}
-
-function csv() {
+function pobierzCsv(nazwa, rows) {
   const q = (v) => { v = String(v ?? ""); return /[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v; };
-  const l = [...S.wyd].sort((a, b) => (a.data || "").localeCompare(b.data || ""));
-  const rows = [["Data", "Opis", "Kwota", "Pomieszczenie", "Kategoria", "Sklep / wykonawca", "Status", "Notatka"]];
-  for (const w of l) rows.push([w.data, w.opis, f2.format((w.kwotaGr || 0) / 100).replace(/\s/g, ""), nazwaPom(w.pom), nazwaKat(w.kat), w.gdzie, w.status === "do-zaplaty" ? "do zapłaty" : "zapłacone", w.notatka]);
-  return "﻿" + rows.map((r) => r.map(q).join(";")).join("\r\n");
-}
-function eksport() {
-  const url = URL.createObjectURL(new Blob([csv()], { type: "text/csv;charset=utf-8" }));
-  const a = document.createElement("a"); a.href = url; a.download = `koszty-wykonczenia-${dzis()}.csv`;
+  const kw = (gr) => f2.format((gr || 0) / 100).replace(/\s/g, "");
+  const tekst = "﻿" + rows.map((r) => r.map((c) => q(typeof c === "object" && c ? kw(c.gr) : c)).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([tekst], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a"); a.href = url; a.download = `${nazwa}-${dzis()}.csv`;
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
-
-/* ---------- formularz ---------- */
-function otworz(w) {
-  const ost = S.ostatni || {};
-  S.edit = w ? { ...klon(w), pliki: [...(w.pliki || [])], nowe: [] } : { id: null, data: dzis(), opis: "", kwotaGr: null, pom: S.f.pom && S.f.pom !== "-" ? S.f.pom : ost.pom || pom()[0]?.id || "", kat: S.f.kat && S.f.kat !== "-" ? S.f.kat : ost.kat || "", gdzie: "", status: "zaplacone", notatka: "", pliki: [], nowe: [] };
-  const e = S.edit;
-  $("#form-h").textContent = e.id ? "Edycja wydatku" : "Nowy wydatek";
-  $("#f-opis").value = e.opis || "";
-  $("#f-kwota").value = e.kwotaGr != null ? f2.format(e.kwotaGr / 100) : "";
-  $("#f-data").value = e.data || "";
-  $("#f-pom").innerHTML = opcje(pom(), e.pom, "— wybierz —");
-  $("#f-kat").innerHTML = opcje(kat(), e.kat, "— wybierz —");
-  $("#f-gdzie").value = e.gdzie || "";
-  $("#f-notatka").value = e.notatka || "";
-  $("#dl-gdzie").innerHTML = [...new Set(S.wyd.map((w) => w.gdzie).filter(Boolean))].sort().map((g) => `<option value="${esc(g)}">`).join("");
-  ustawStatus(e.status);
-  $("#f-save-next").hidden = !!e.id;
-  $("#f-del").hidden = !e.id; $("#f-del").textContent = "Usuń"; delete $("#f-del").dataset.sure;
-  $("#f-err").hidden = true;
-  renderPliki();
-  $("#veil").hidden = false; document.body.style.overflow = "hidden";
-  if (!e.id) setTimeout(() => $("#f-opis").focus(), 30);
+function csvPozycje() {
+  const rows = [["Pomieszczenie", "Pozycja", "Kategoria", "Plan", "Zapłacone", "Zostało", "Zakończona", "Zakup domu", "Notatka"]];
+  for (const x of licz().values()) rows.push([nazwaPom(x.p.pom), x.p.nazwa, nazwaKat(x.p.kat), { gr: x.plan }, { gr: x.zapl }, { gr: x.zostalo }, x.p.zakonczona ? "tak" : "", x.p.zakup ? "tak" : "", x.p.notatka]);
+  pobierzCsv("koszty-pozycje", rows);
 }
-function ustawStatus(st) {
-  if (S.edit) S.edit.status = st;
-  $("#f-st-z").setAttribute("aria-pressed", st !== "do-zaplaty");
-  $("#f-st-d").setAttribute("aria-pressed", st === "do-zaplaty");
+function csvPlatnosci() {
+  const rows = [["Data", "Pozycja", "Pomieszczenie", "Opis", "Sklep / wykonawca", "Kwota", "Notatka"]];
+  for (const pl of [...platnosci()].sort((a, b) => (a.data || "").localeCompare(b.data || ""))) { const p = poz(pl.pozycja); rows.push([pl.data, p?.nazwa, p ? nazwaPom(p.pom) : "", pl.opis, pl.gdzie, { gr: pl.kwotaGr }, pl.notatka]); }
+  pobierzCsv("koszty-platnosci", rows);
+}
+
+/* ---------- arkusz: pozycja ---------- */
+function otworzPoz(id) {
+  const p = id ? poz(id) : null;
+  S.sheet = { typ: "poz", id: p?.id || null };
+  const x = p ? licz().get(p.id) : null;
+  const pl = p ? platnosci().filter((q) => q.pozycja === p.id).sort((a, b) => (b.data || "").localeCompare(a.data || "")) : [];
+  const domPom = S.fp.pom && S.fp.pom !== "-" ? S.fp.pom : pom()[0]?.id || "";
+  $("#sheet").innerHTML = `<div class="tapebar" aria-hidden="true"></div><form class="sheet-in" id="form-poz" novalidate>
+    <h2 id="sheet-h">${p ? "Pozycja" : "Nowa pozycja"}</h2>
+    <div class="fg"><label for="p-nazwa">Nazwa</label><input class="ctl" id="p-nazwa" value="${esc(p?.nazwa || "")}" placeholder="np. Meble kuchnia" autocomplete="off"></div>
+    <div class="two">
+      <div class="fg"><label for="p-pom">Pomieszczenie</label><select class="ctl" id="p-pom">${opcje(pom(), p ? p.pom : domPom, "— wybierz —")}</select></div>
+      <div class="fg"><label for="p-kat">Kategoria</label><select class="ctl" id="p-kat">${opcje(kat(), p ? p.kat : S.fp.kat !== "-" ? S.fp.kat : "", "— wybierz —")}</select></div>
+    </div>
+    <div class="two">
+      <div class="fg"><label for="p-plan">Plan (zł)</label><input class="ctl kw" id="p-plan" inputmode="decimal" value="${p?.planGr ? f0.format(p.planGr / 100) : ""}" placeholder="ile planujesz wydać"></div>
+      <div class="fg checks"><label><input type="checkbox" id="p-zak" ${p?.zakonczona ? "checked" : ""}> Zakończone, nic więcej nie płacę</label><label><input type="checkbox" id="p-zakup" ${p?.zakup ? "checked" : ""}> Zakup domu (poza budżetem wykończenia)</label></div>
+    </div>
+    <div class="fg"><label for="p-notatka">Notatka</label><textarea class="ctl" id="p-notatka" rows="2" placeholder="zakres, ustalenia z wykonawcą…">${esc(p?.notatka || "")}</textarea></div>
+    ${p ? `<div class="pozsum"><div><span class="lbl">Zapłacone</span><b class="num">${zl2(x.zapl)}</b></div><div><span class="lbl">Plan</span><b class="num">${x.plan ? zl2(x.plan) : "—"}</b></div><div><span class="lbl">Zostało</span><b class="num">${zl2(x.zostalo)}</b></div></div>${tasma(x.zapl, x.zostalo, x.plan)}
+      <div class="fg"><div class="pl-head"><span class="lbl">Płatności (${pl.length})</span><button class="btn" type="button" data-nowa-pl="${esc(p.id)}">+ Dodaj płatność</button></div>
+      ${pl.length ? `<div>${pl.map(wierszPl).join("")}</div>` : `<p class="hint" style="margin:0">Brak płatności.</p>`}</div>` : ""}
+    <div class="err" id="p-err" hidden></div>
+    <div class="actions"><div>${p ? `<button class="btn danger" type="button" id="p-del">Usuń pozycję</button>` : ""}</div>
+      <div class="r"><button class="btn" type="button" data-zamknij>Anuluj</button><button class="btn pri" type="submit">Zapisz</button></div></div>
+  </form>`;
+  pokazSheet(p ? null : "#p-nazwa");
+}
+async function zapiszPoz() {
+  const id = S.sheet.id || losoweId();
+  const nazwa = $("#p-nazwa").value.trim(), planTxt = $("#p-plan").value.trim();
+  const plan = planTxt ? parseKwota(planTxt) : 0;
+  const blad = !nazwa ? "Wpisz nazwę pozycji." : plan === null || plan < 0 ? "Plan wpisz jako liczbę, np. 45000." : !$("#p-pom").value ? "Wybierz pomieszczenie." : !$("#p-kat").value ? "Wybierz kategorię." : "";
+  if (blad) { const e = $("#p-err"); e.textContent = blad; e.hidden = false; return; }
+  const dane = { nazwa, pom: $("#p-pom").value, kat: $("#p-kat").value, planGr: plan || 0, zakonczona: $("#p-zak").checked, zakup: $("#p-zakup").checked, notatka: $("#p-notatka").value.trim() };
+  try {
+    await zmien(`${S.sheet.id ? "Pozycja" : "Nowa pozycja"}: ${nazwa}`, (d) => {
+      const p = d.pozycje.find((q) => q.id === id);
+      if (p) Object.assign(p, dane); else d.pozycje.push({ id, ...dane });
+    });
+    zamknij(); toast(`Zapisano pozycję: ${nazwa}`);
+  } catch (e) { bladZapisu(e); }
+}
+async function usunPoz() {
+  const id = S.sheet.id, b = $("#p-del"), n = platnosci().filter((q) => q.pozycja === id).length;
+  if (n) { const e = $("#p-err"); e.textContent = `Ta pozycja ma ${n} płatności. Najpierw je usuń albo przepnij do innej pozycji.`; e.hidden = false; return; }
+  if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Na pewno usunąć?"; return; }
+  try { await zmien(`Usunięto pozycję: ${poz(id)?.nazwa}`, (d) => { d.pozycje = d.pozycje.filter((q) => q.id !== id); }); zamknij(); toast("Usunięto pozycję."); }
+  catch (e) { bladZapisu(e); }
+}
+
+/* ---------- arkusz: płatność ---------- */
+function otworzPl(id, pozId, powrot) {
+  const pl = id ? platnosci().find((q) => q.id === id) : null;
+  S.sheet = { typ: "pl", id: pl?.id || null, pliki: [...(pl?.pliki || [])], nowe: [], wgrywa: false, powrot: powrot || null };
+  const wyb = pl?.pozycja || pozId || S.ostatniaPoz || "";
+  $("#sheet").innerHTML = `<div class="tapebar" aria-hidden="true"></div><form class="sheet-in" id="form-pl" novalidate>
+    <h2 id="sheet-h">${pl ? "Płatność" : "Nowa płatność"}</h2>
+    <div class="fg"><label for="pl-poz">Pozycja</label><select class="ctl" id="pl-poz">${opcjePoz(wyb)}</select></div>
+    <div class="two">
+      <div class="fg"><label for="pl-kwota">Kwota (zł)</label><input class="ctl kw" id="pl-kwota" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${pl ? f2.format(pl.kwotaGr / 100) : ""}"></div>
+      <div class="fg"><label for="pl-data">Data</label><input class="ctl" id="pl-data" type="date" value="${pl ? pl.data || "" : dzis()}"></div>
+    </div>
+    <div class="fg"><label for="pl-opis">Za co <span class="hint">(opcjonalnie)</span></label><input class="ctl" id="pl-opis" autocomplete="off" placeholder="np. zaliczka, fuga i klej, II rata" value="${esc(pl?.opis || "")}"></div>
+    <div class="fg"><label for="pl-gdzie">Sklep / wykonawca</label><input class="ctl" id="pl-gdzie" list="dl-gdzie" autocomplete="off" placeholder="np. Kazik, Leroy Merlin" value="${esc(pl?.gdzie || "")}"><datalist id="dl-gdzie">${wykonawcy().map((g) => `<option value="${esc(g)}">`).join("")}</datalist></div>
+    <div class="fg"><label for="pl-notatka">Notatka</label><textarea class="ctl" id="pl-notatka" rows="2" placeholder="nr faktury, gwarancja…">${esc(pl?.notatka || "")}</textarea></div>
+    <div class="fg"><span class="lbl">Paragony i faktury</span><div class="files" id="pl-files"></div><input type="file" id="pl-file" accept="image/*,application/pdf" multiple hidden></div>
+    <div class="err" id="pl-err" hidden></div>
+    <div class="actions"><div>${pl ? `<button class="btn danger" type="button" id="pl-del">Usuń</button>` : ""}</div>
+      <div class="r"><button class="btn" type="button" data-zamknij>Anuluj</button>${pl ? "" : `<button class="btn" type="button" id="pl-next">Zapisz i dodaj kolejną</button>`}<button class="btn pri" type="submit" id="pl-save">Zapisz</button></div></div>
+  </form>`;
+  renderPliki();
+  pokazSheet(pl ? null : pozId ? "#pl-kwota" : "#pl-poz");
 }
 function renderPliki() {
-  const e = S.edit; if (!e) return;
-  $("#f-files").innerHTML = e.pliki.map((p, i) => `<div class="file">${p.typ === "application/pdf" ? `<button type="button" class="btn link" data-pdf="${esc(p.id)}">PDF</button>` : `<img alt="${esc(p.nazwa || "paragon")}" data-blob="${esc(p.id)}" data-zoom="${esc(p.id)}">`}<button type="button" class="x" data-rm="${i}" aria-label="Usuń załącznik">×</button></div>`).join("")
-    + `<button type="button" class="file addfile" id="f-addfile" ${e.wgrywa ? "disabled" : ""}>${e.wgrywa ? "Wgrywanie…" : "+ zdjęcie lub PDF"}</button>`;
-  $("#f-files-h").textContent = "";
-  for (const img of $("#f-files").querySelectorAll("img[data-blob]")) blobUrl(img.dataset.blob).then((u) => (img.src = u), () => (img.alt = "brak pliku"));
+  const e = S.sheet; if (!e || e.typ !== "pl") return;
+  const box = $("#pl-files");
+  box.innerHTML = e.pliki.map((p, i) => `<div class="file">${p.typ === "application/pdf" ? `<button type="button" class="btn link" data-pdf="${esc(p.id)}">PDF</button>` : `<img alt="${esc(p.nazwa || "paragon")}" data-blob="${esc(p.id)}" data-zoom="${esc(p.id)}">`}<button type="button" class="x" data-rm="${i}" aria-label="Usuń załącznik">×</button></div>`).join("")
+    + `<button type="button" class="file addfile" id="pl-addfile" ${e.wgrywa ? "disabled" : ""}>${e.wgrywa ? "Wgrywanie…" : "+ zdjęcie lub PDF"}</button>`;
+  for (const img of box.querySelectorAll("img[data-blob]")) blobUrl(img.dataset.blob).then((u) => (img.src = u), () => (img.alt = "brak pliku"));
 }
 async function przygotujPlik(file) {
   if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) return { bytes: new Uint8Array(await file.arrayBuffer()), type: "application/pdf", ext: "pdf" };
@@ -514,7 +507,7 @@ async function przygotujPlik(file) {
   throw { code: "format" };
 }
 async function wgraj(files) {
-  const e = S.edit; if (!e) return;
+  const e = S.sheet; if (!e || e.typ !== "pl") return;
   e.wgrywa = true; renderPliki();
   for (const f of files) {
     try {
@@ -523,7 +516,7 @@ async function wgraj(files) {
       const path = `paragony/${dzis().slice(0, 7)}/${losoweId()}.${ext}`;
       await wgrajPlikGH(path, bytes, `Załącznik: ${f.name}`);
       bloby.set(path, Promise.resolve(URL.createObjectURL(new Blob([bytes], { type }))));
-      if (S.edit !== e) { usunPlikGH(path); return; }
+      if (S.sheet !== e) { usunPlikGH(path); return; }
       e.pliki.push({ id: path, typ: type, nazwa: f.name }); e.nowe.push(path);
     } catch (err) {
       const c = err?.code;
@@ -533,59 +526,53 @@ async function wgraj(files) {
   }
   e.wgrywa = false; renderPliki();
 }
-function zamknij(anulowano) {
-  const e = S.edit;
-  if (anulowano && e?.nowe?.length) for (const p of e.nowe) usunPlikGH(p);
-  S.edit = null; $("#veil").hidden = true; document.body.style.overflow = "";
-}
-async function zapisz(kolejny) {
-  const e = S.edit; if (!e || e.wgrywa) return;
-  const kw = parseKwota($("#f-kwota").value), opis = $("#f-opis").value.trim();
-  const blad = !opis ? "Wpisz, za co płacisz." : kw === null || kw <= 0 ? "Wpisz kwotę większą od zera, np. 1250,50." : !$("#f-pom").value ? "Wybierz pomieszczenie." : !$("#f-kat").value ? "Wybierz kategorię." : "";
-  if (blad) { const er = $("#f-err"); er.textContent = blad; er.hidden = false; return; }
-  const id = e.id || losoweId();
-  const doc = { id, data: $("#f-data").value || "", opis, kwotaGr: kw, pom: $("#f-pom").value, kat: $("#f-kat").value, gdzie: $("#f-gdzie").value.trim(), status: e.status, notatka: $("#f-notatka").value.trim(), pliki: e.pliki, utworzono: e.utworzono || new Date().toISOString() };
-  if (e.zrodlo) doc.zrodlo = e.zrodlo;
-  const usuniete = (S.wyd.find((w) => w.id === e.id)?.pliki || []).filter((p) => !e.pliki.some((q) => q.id === p.id)).map((p) => p.id);
-  $("#f-save").disabled = $("#f-save-next").disabled = true;
+async function zapiszPl(kolejna) {
+  const e = S.sheet; if (!e || e.wgrywa) return;
+  const kw = parseKwota($("#pl-kwota").value), pozId = $("#pl-poz").value;
+  const blad = !pozId ? "Wybierz pozycję, której dotyczy płatność." : kw === null || kw <= 0 ? "Wpisz kwotę większą od zera, np. 1250,50." : "";
+  if (blad) { const er = $("#pl-err"); er.textContent = blad; er.hidden = false; return; }
+  const id = e.id || losoweId(), stara = platnosci().find((q) => q.id === e.id);
+  const doc = { id, pozycja: pozId, data: $("#pl-data").value || "", kwotaGr: kw, opis: $("#pl-opis").value.trim(), gdzie: $("#pl-gdzie").value.trim(), notatka: $("#pl-notatka").value.trim(), pliki: e.pliki, utworzono: stara?.utworzono || new Date().toISOString() };
+  if (stara?.zrodlo) doc.zrodlo = stara.zrodlo;
+  const usuniete = (stara?.pliki || []).filter((p) => !e.pliki.some((q) => q.id === p.id)).map((p) => p.id);
+  const nazwa = poz(pozId)?.nazwa || "";
+  for (const b of document.querySelectorAll("#pl-save,#pl-next")) b.disabled = true;
   try {
-    await zmien(`${e.id ? "Zmiana" : "Nowy wydatek"}: ${opis}, ${zl2(kw)}`, (d) => {
-      const i = d.wydatki.findIndex((x) => x.id === id);
-      if (i >= 0) d.wydatki[i] = doc; else d.wydatki.push(doc);
+    await zmien(`${e.id ? "Zmiana płatności" : "Płatność"}: ${nazwa}, ${zl2(kw)}${doc.gdzie ? ", " + doc.gdzie : ""}`, (d) => {
+      const i = d.platnosci.findIndex((q) => q.id === id);
+      if (i >= 0) d.platnosci[i] = doc; else d.platnosci.push(doc);
     });
-    S.ostatni = { pom: doc.pom, kat: doc.kat };
+    S.ostatniaPoz = pozId;
     for (const p of usuniete) usunPlikGH(p);
-    S.edit = null;
-    toast(`Zapisano: ${opis}, ${zl2(kw)}`);
-    if (kolejny) { otworz(null); $("#f-data").value = doc.data; $("#f-gdzie").value = doc.gdzie; }
-    else zamknij(false);
-  } catch (err) { bladZapisu(err); }
-  finally { $("#f-save").disabled = $("#f-save-next").disabled = false; }
+    e.nowe = [];
+    toast(`Zapisano: ${nazwa}, ${zl2(kw)}`);
+    if (kolejna) { otworzPl(null, pozId, e.powrot); $("#pl-data").value = doc.data; $("#pl-gdzie").value = doc.gdzie; }
+    else if (e.powrot) otworzPoz(e.powrot);
+    else zamknij();
+  } catch (err) { bladZapisu(err); for (const b of document.querySelectorAll("#pl-save,#pl-next")) b.disabled = false; }
 }
-async function usunWydatek() {
-  const b = $("#f-del"), e = S.edit;
+async function usunPl() {
+  const b = $("#pl-del"), e = S.sheet, pl = platnosci().find((q) => q.id === e.id);
   if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Na pewno usunąć?"; return; }
   try {
-    await zmien(`Usunięto: ${e.opis}`, (d) => { d.wydatki = d.wydatki.filter((x) => x.id !== e.id); });
-    for (const p of S.wyd.find((w) => w.id === e.id)?.pliki || e.pliki) usunPlikGH(p.id);
-    zamknij(false); toast("Usunięto wydatek.");
+    await zmien(`Usunięto płatność: ${poz(pl?.pozycja)?.nazwa || ""}, ${zl2(pl?.kwotaGr)}`, (d) => { d.platnosci = d.platnosci.filter((q) => q.id !== e.id); });
+    for (const p of pl?.pliki || []) usunPlikGH(p.id);
+    toast("Usunięto płatność.");
+    if (e.powrot) otworzPoz(e.powrot); else zamknij();
   } catch (err) { bladZapisu(err); }
 }
-async function usunPozycje() {
-  const { typ, id } = S.usuwanie;
-  const pole = typ === "pom" ? "pom" : "kat";
-  const ile = S.wyd.filter((w) => w[pole] === id).length;
-  const cel = $("#u-move")?.value;
-  if (ile && !cel) return;
-  try {
-    await zmien(`Usunięto ${typ === "pom" ? "pomieszczenie" : "kategorię"} ${id}${ile ? `, przeniesiono ${ile} wydatków` : ""}`, (d) => {
-      for (const w of d.wydatki) if (w[pole] === id) w[pole] = cel;
-      const lista = typ === "pom" ? d.ustawienia.pomieszczenia : d.ustawienia.kategorie;
-      const i = lista.findIndex((x) => x.id === id); if (i >= 0) lista.splice(i, 1);
-    });
-    S.usuwanie = null; if (S.f[pole] === id) S.f[pole] = "";
-    renderUstawienia(true);
-  } catch (e) { bladZapisu(e); }
+
+/* ---------- arkusz: wspólne ---------- */
+function pokazSheet(fokus) {
+  $("#veil").hidden = false; document.body.style.overflow = "hidden";
+  $("#sheet").scrollTop = 0;
+  if (fokus) setTimeout(() => $(fokus)?.focus(), 30);
+}
+function zamknij(anulowano) {
+  const e = S.sheet;
+  if (anulowano && e?.typ === "pl" && e.nowe?.length) for (const p of e.nowe) usunPlikGH(p);
+  if (anulowano && e?.typ === "pl" && e.powrot) { otworzPoz(e.powrot); return; }
+  S.sheet = null; $("#veil").hidden = true; document.body.style.overflow = "";
 }
 
 /* ---------- logowanie ---------- */
@@ -625,13 +612,13 @@ async function zaloguj(token) {
   S.logowanie = false; S.cichy = false; render();
 }
 function wyloguj(msg) {
-  zapiszToken(""); S.token = ""; S.zalogowany = false; S.bladLogowania = msg || ""; S.dane = null; S.wyd = []; S.ust = null; S.ustLoaded = S.wydLoaded = false;
-  if (S.edit) zamknij(false);
+  zapiszToken(""); S.token = ""; S.zalogowany = false; S.bladLogowania = msg || ""; S.dane = null; S.gotowe = false; S.calc = null;
+  if (S.sheet) { S.sheet = null; $("#veil").hidden = true; document.body.style.overflow = ""; }
   sync("off", "Niepołączone"); render();
 }
 async function odswiez() {
-  if (!S.zalogowany || zajete || S.edit || S.importuje || document.visibilityState !== "visible") return;
-  try { const p = await pobierz(); if (p.sha !== S.sha && !zajete) { S.sha = p.sha; ustawDane(p.dane); } sync("ok", "Aktualne"); }
+  if (!S.zalogowany || zajete || S.sheet || document.visibilityState !== "visible") return;
+  try { const p = await pobierz(); if (p.sha !== S.sha && !zajete && !S.sheet) { S.sha = p.sha; ustawDane(p.dane); } sync("ok", "Aktualne"); }
   catch (e) { if (e?.code === "token") wyloguj("Token wygasł albo został cofnięty. Wklej nowy."); else if (e?.code === "siec") sync("err", "Brak internetu"); }
 }
 
@@ -639,14 +626,12 @@ async function odswiez() {
 function render() {
   const zal = S.zalogowany;
   $("#v-login").hidden = zal; $("nav.tabs").hidden = !zal;
-  if (!zal) { for (const v of ["podsumowanie", "wydatki", "ustawienia"]) $("#v-" + v).hidden = true; $("#fab").hidden = true; renderLogin(); return; }
-  for (const v of ["podsumowanie", "wydatki", "ustawienia"]) {
-    $("#v-" + v).hidden = S.view !== v;
-    $("#t-" + v).setAttribute("aria-selected", S.view === v);
-  }
-  $("#fab").hidden = !S.ustLoaded;
+  if (!zal) { for (const v of WIDOKI) $("#v-" + v).hidden = true; $("#fab").hidden = true; renderLogin(); return; }
+  for (const v of WIDOKI) { $("#v-" + v).hidden = S.view !== v; $("#t-" + v).setAttribute("aria-selected", S.view === v); }
+  $("#fab").hidden = !S.gotowe || !pozycje().length;
   if (S.view === "podsumowanie") renderPodsumowanie();
-  if (S.view === "wydatki") renderWydatki();
+  if (S.view === "pozycje") renderPozycje();
+  if (S.view === "platnosci") renderPlatnosci();
   if (S.view === "ustawienia") renderUstawienia();
 }
 function idz(v) {
@@ -659,81 +644,70 @@ function wire() {
   const d = new Date();
   $("#today").textContent = `stan na ${d.getDate()} ${["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września", "października", "listopada", "grudnia"][d.getMonth()]} ${d.getFullYear()}`;
   document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => idz(b.dataset.v)));
-  $("#fab").addEventListener("click", () => otworz(null));
-  $("#q").addEventListener("input", (e) => { S.f.q = e.target.value; renderWydatki(); });
-  $("#f-pom-f").addEventListener("change", (e) => { S.f.pom = e.target.value; renderWydatki(); });
-  $("#f-kat-f").addEventListener("change", (e) => { S.f.kat = e.target.value; renderWydatki(); });
-  $("#f-st-f").addEventListener("change", (e) => { S.f.st = e.target.value; renderWydatki(); });
-  $("#f-clear").addEventListener("click", () => { S.f = { q: "", pom: "", kat: "", st: "" }; renderWydatki(); });
+  $("#fab").addEventListener("click", () => otworzPl(null));
+  $("#fp-q").addEventListener("input", (e) => { S.fp.q = e.target.value; renderPozycje(); });
+  $("#fp-pom").addEventListener("change", (e) => { S.fp.pom = e.target.value; renderPozycje(); });
+  $("#fp-kat").addEventListener("change", (e) => { S.fp.kat = e.target.value; renderPozycje(); });
+  $("#fp-stan").addEventListener("change", (e) => { S.fp.stan = e.target.value; renderPozycje(); });
+  $("#fp-clear").addEventListener("click", () => { S.fp = { q: "", pom: "", kat: "", stan: "" }; renderPozycje(); });
+  $("#fl-q").addEventListener("input", (e) => { S.fl.q = e.target.value; renderPlatnosci(); });
+  $("#fl-pom").addEventListener("change", (e) => { S.fl.pom = e.target.value; renderPlatnosci(); });
+  $("#fl-gdzie").addEventListener("change", (e) => { S.fl.gdzie = e.target.value; renderPlatnosci(); });
+  $("#fl-clear").addEventListener("click", () => { S.fl = { q: "", pom: "", gdzie: "" }; renderPlatnosci(); });
 
   document.addEventListener("click", (ev) => {
     const t = ev.target;
-    const wid = t.closest("[data-id].wyd"); if (wid) { const w = S.wyd.find((x) => x.id === wid.dataset.id); if (w) otworz(w); return; }
-    const fp = t.closest("[data-fpom]"); if (fp) { S.f = { q: "", pom: fp.dataset.fpom || "-", kat: "", st: "" }; idz("wydatki"); return; }
-    const fk = t.closest("[data-fkat]"); if (fk) { S.f = { q: "", pom: "", kat: fk.dataset.fkat || "-", st: "" }; idz("wydatki"); return; }
-    const go = t.closest("[data-go]"); if (go) { idz(go.dataset.go); return; }
-    if (t.closest("[data-add]")) { otworz(null); return; }
+    const plB = t.closest("[data-pl]"); if (plB) { otworzPl(plB.dataset.pl, null, S.sheet?.typ === "poz" ? S.sheet.id : null); return; }
+    const pozB = t.closest("[data-poz]"); if (pozB) { otworzPoz(pozB.dataset.poz); return; }
+    const nPl = t.closest("[data-nowa-pl]"); if (nPl) { otworzPl(null, nPl.dataset.nowaPl, nPl.dataset.nowaPl); return; }
+    if (t.closest("[data-nowa-poz]")) { otworzPoz(null); return; }
+    if (t.closest("[data-zamknij]")) { zamknij(true); return; }
+    const fp = t.closest("[data-fpom]"); if (fp) { S.fp = { q: "", pom: fp.dataset.fpom, kat: "", stan: "" }; idz("pozycje"); return; }
+    const fk = t.closest("[data-fkat]"); if (fk) { S.fp = { q: "", pom: "", kat: fk.dataset.fkat, stan: "" }; idz("pozycje"); return; }
+    const fg = t.closest("[data-fgdzie]"); if (fg) { S.fl = { q: "", pom: "", gdzie: fg.dataset.fgdzie }; idz("platnosci"); return; }
     const z = t.closest("[data-zoom]"); if (z && z.src) { const lb = document.createElement("div"); lb.className = "lightbox"; lb.innerHTML = `<img src="${z.src}" alt="">`; lb.addEventListener("click", () => lb.remove()); document.body.append(lb); return; }
     const pdf = t.closest("[data-pdf]"); if (pdf) { const okno = window.open("", "_blank"); blobUrl(pdf.dataset.pdf).then((u) => { if (okno) okno.location.href = u; else location.href = u; }, () => { okno?.close(); toast("Nie udało się otworzyć pliku."); }); return; }
-    const rm = t.closest("[data-rm]"); if (rm && S.edit) { S.edit.pliki.splice(+rm.dataset.rm, 1); renderPliki(); return; }
-    if (t.closest("#f-addfile")) { $("#f-file").click(); return; }
+    const rm = t.closest("[data-rm]"); if (rm && S.sheet?.typ === "pl") { S.sheet.pliki.splice(+rm.dataset.rm, 1); renderPliki(); return; }
+    if (t.closest("#pl-addfile")) { $("#pl-file").click(); return; }
+    if (t.id === "pl-next") { zapiszPl(true); return; }
+    if (t.id === "pl-del") { usunPl(); return; }
+    if (t.id === "p-del") { usunPoz(); return; }
     const ud = t.closest("[data-u-del]"); if (ud) { S.usuwanie = { typ: ud.dataset.uDel, id: ud.dataset.id }; renderUstawienia(true); return; }
     if (t.closest("[data-del-no]")) { S.usuwanie = null; renderUstawienia(true); return; }
-    if (t.closest("[data-del-ok]")) { usunPozycje(); return; }
-    if (t.id === "u-export") { eksport(); return; }
+    if (t.closest("[data-del-ok]")) { usunSlownik(); return; }
+    if (t.id === "u-csv-poz") { csvPozycje(); return; }
+    if (t.id === "u-csv-pl") { csvPlatnosci(); return; }
     if (t.id === "u-logout") { wyloguj(); return; }
-    if (t.id === "imp-czytaj") {
-      const rows = parseTabela($("#imp-txt").value);
-      if (!rows.length) { toast("Wklej najpierw dane z arkusza."); return; }
-      S.imp = { rows, ...zgadnijMape(rows) }; renderUstawienia(true); return;
-    }
-    if (t.id === "imp-anuluj") { S.imp = null; renderUstawienia(true); return; }
-    if (t.id === "imp-go") { wykonajImport(); return; }
   });
   document.addEventListener("change", (ev) => {
     const t = ev.target;
-    if (t.dataset.impCol != null && S.imp) { S.imp.mapa[+t.dataset.impCol] = t.value; renderUstawienia(true); return; }
-    if (t.id === "imp-nagl" && S.imp) { S.imp.naglowek = t.checked; renderUstawienia(true); return; }
-    const u = t.dataset.u; if (!u || !pisanie()) return;
-    const id = t.dataset.id;
-    if (u === "pom-n" || u === "kat-n") {
-      const lista = u === "pom-n" ? pom() : kat();
-      const x = lista.find((y) => y.id === id); const v = t.value.trim();
-      if (!x || !v || v === x.nazwa) { t.value = x?.nazwa || ""; return; }
-      t.blur();
-      zmien(`Zmiana nazwy: ${x.nazwa} → ${v}`, (d) => { const y = (u === "pom-n" ? d.ustawienia.pomieszczenia : d.ustawienia.kategorie).find((z) => z.id === id); if (y) y.nazwa = v; }).catch(bladZapisu);
-    } else if (u === "pom-b") {
-      const x = pom().find((y) => y.id === id); const v = t.value.trim() ? parseKwota(t.value) : 0;
-      if (!x || v === null || v < 0) { toast("Budżet wpisz jako liczbę, np. 45000."); t.value = x?.budzetGr ? f0.format(x.budzetGr / 100) : ""; return; }
-      t.value = v ? f0.format(v / 100) : ""; t.blur();
-      zmien(`Budżet: ${x.nazwa} = ${zl(v)}`, (d) => { const y = d.ustawienia.pomieszczenia.find((z) => z.id === id); if (y) y.budzetGr = v; }).catch(bladZapisu);
-    }
+    if (t.id === "pl-file") { const fs = [...t.files]; t.value = ""; if (fs.length) wgraj(fs); return; }
+    const u = t.dataset.u; if (!u || !S.zalogowany) return;
+    const id = t.dataset.id, lista = u === "pom" ? pom() : kat();
+    const x = lista.find((y) => y.id === id), v = t.value.trim();
+    if (!x || !v || v === x.nazwa) { t.value = x?.nazwa || ""; return; }
+    t.blur();
+    zmien(`Zmiana nazwy: ${x.nazwa} → ${v}`, (d) => { const y = (u === "pom" ? d.ustawienia.pomieszczenia : d.ustawienia.kategorie).find((q) => q.id === id); if (y) y.nazwa = v; }).catch(bladZapisu);
   });
   document.addEventListener("submit", (ev) => {
     const f = ev.target;
-    if (f.id === "login-form") { ev.preventDefault(); const v = $("#login-token").value.trim(); if (v) zaloguj(v); return; }
+    ev.preventDefault();
+    if (f.id === "login-form") { const v = $("#login-token").value.trim(); if (v) zaloguj(v); return; }
+    if (f.id === "form-poz") { zapiszPoz(); return; }
+    if (f.id === "form-pl") { zapiszPl(false); return; }
     if (f.id === "u-add-pom" || f.id === "u-add-kat") {
-      ev.preventDefault();
       const inp = f.querySelector("input"), n = inp.value.trim(); if (!n) return;
       const czyPom = f.id === "u-add-pom";
-      if (znajdz(czyPom ? pom() : kat(), n)) { toast(`„${n}” już jest na liście.`); return; }
+      if ((czyPom ? pom() : kat()).some((x) => x.nazwa.toLowerCase() === n.toLowerCase())) { toast(`„${n}” już jest na liście.`); return; }
       inp.value = ""; inp.blur();
       zmien(`Dodano ${czyPom ? "pomieszczenie" : "kategorię"}: ${n}`, (d) => {
-        const lista = czyPom ? d.ustawienia.pomieszczenia : d.ustawienia.kategorie;
-        if (!znajdz(lista, n)) lista.push(czyPom ? { id: noweId(lista, n), nazwa: n, budzetGr: 0 } : { id: noweId(lista, n), nazwa: n });
+        const l = czyPom ? d.ustawienia.pomieszczenia : d.ustawienia.kategorie;
+        l.push({ id: noweId(l, n), nazwa: n });
       }).catch(bladZapisu);
     }
   });
-
-  $("#form").addEventListener("submit", (e) => { e.preventDefault(); zapisz(false); });
-  $("#f-save-next").addEventListener("click", () => zapisz(true));
-  $("#f-cancel").addEventListener("click", () => zamknij(true));
-  $("#f-del").addEventListener("click", usunWydatek);
-  $("#f-st-z").addEventListener("click", () => ustawStatus("zaplacone"));
-  $("#f-st-d").addEventListener("click", () => ustawStatus("do-zaplaty"));
-  $("#f-file").addEventListener("change", (e) => { const fs = [...e.target.files]; e.target.value = ""; if (fs.length) wgraj(fs); });
   $("#veil").addEventListener("click", (e) => { if (e.target.id === "veil") zamknij(true); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { const lb = $(".lightbox"); if (lb) lb.remove(); else if (S.edit) zamknij(true); } });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { const lb = $(".lightbox"); if (lb) lb.remove(); else if (S.sheet) zamknij(true); } });
 
   const tip = $("#tip");
   document.addEventListener("pointerover", (e) => {
@@ -743,14 +717,27 @@ function wire() {
     tip.style.left = Math.max(8, Math.min(innerWidth - tip.offsetWidth - 8, r.left + r.width / 2 - tip.offsetWidth / 2)) + "px";
     tip.style.top = Math.max(8, r.top + (r.height - (t.querySelector("b")?.offsetHeight || 0)) - tip.offsetHeight - 8) + "px";
   });
-
+  window.addEventListener("hashchange", () => { const v = location.hash.slice(1); if (WIDOKI.includes(v) && v !== S.view) idz(v); });
   document.addEventListener("visibilitychange", odswiez);
   setInterval(odswiez, 60000);
 }
+async function usunSlownik() {
+  const { typ, id } = S.usuwanie;
+  const n = pozycje().filter((p) => p[typ] === id).length, cel = $("#u-move")?.value;
+  if (n && !cel) return;
+  try {
+    await zmien(`Usunięto ${typ === "pom" ? "pomieszczenie" : "kategorię"} ${id}${n ? `, przeniesiono ${n} pozycji` : ""}`, (d) => {
+      for (const p of d.pozycje) if (p[typ] === id) p[typ] = cel;
+      const l = typ === "pom" ? d.ustawienia.pomieszczenia : d.ustawienia.kategorie;
+      const i = l.findIndex((x) => x.id === id); if (i >= 0) l.splice(i, 1);
+    });
+    S.usuwanie = null; renderUstawienia(true);
+  } catch (e) { bladZapisu(e); }
+}
 
 /* ---------- start ---------- */
-try { const v = localStorage.getItem("kd-view"); if (["podsumowanie", "wydatki", "ustawienia"].includes(v)) S.view = v; } catch {}
-const h = location.hash.slice(1); if (["podsumowanie", "wydatki", "ustawienia"].includes(h)) S.view = h;
+try { const v = localStorage.getItem("kd-view"); if (WIDOKI.includes(v)) S.view = v; } catch {}
+const h = location.hash.slice(1); if (WIDOKI.includes(h)) S.view = h;
 wire(); render();
 if (S.token) { S.cichy = true; zaloguj(S.token); } else sync("off", "Niepołączone");
 })();

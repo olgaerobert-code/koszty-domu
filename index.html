@@ -72,7 +72,7 @@ h1 { margin: 0; font-family: var(--f-display); font-stretch: 72%; font-weight: 8
 .sync[data-s="saving"]::before { background: var(--warn) }
 .sync[data-s="err"]::before, .sync[data-s="off"]::before { background: var(--bad) }
 
-nav.tabs { display: flex; gap: 4px; margin-top: 16px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+nav.tabs { display: flex; gap: 4px; margin-top: 16px; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 nav.tabs button { background: none; border: 0; padding: 10px 14px; cursor: pointer; font-family: var(--f-display); font-stretch: 85%; font-weight: 600; font-size: 15px; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; white-space: nowrap; }
 nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--tape); }
 
@@ -225,6 +225,14 @@ html, body { margin: 0; }
 img { max-width: 100%; }
 a { color: var(--focus); }
 .login { max-width: 660px; }
+.checks { align-content: end; gap: 6px; font-size: 13.5px; }
+.checks label { display: flex; gap: 8px; align-items: flex-start; font-weight: 500; color: var(--ink); }
+.pozsum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pozsum div { display: grid; gap: 2px; }
+.pozsum b { font-size: 15px; }
+.pl-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sheet .wyd { grid-template-columns: 70px minmax(0, 1fr) auto; }
+.wyd { grid-template-columns: 70px minmax(0, 1fr) auto; }
 .steps { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
 </style>
 </head>
@@ -240,101 +248,55 @@ a { color: var(--focus); }
   </div>
   <nav class="tabs" role="tablist" aria-label="Widoki">
     <button role="tab" id="t-podsumowanie" data-v="podsumowanie" aria-selected="true">Podsumowanie</button>
-    <button role="tab" id="t-wydatki" data-v="wydatki" aria-selected="false">Wydatki</button>
-    <button role="tab" id="t-ustawienia" data-v="ustawienia" aria-selected="false">Budżet i listy</button>
+    <button role="tab" id="t-pozycje" data-v="pozycje" aria-selected="false">Pozycje</button>
+    <button role="tab" id="t-platnosci" data-v="platnosci" aria-selected="false">Płatności</button>
+    <button role="tab" id="t-ustawienia" data-v="ustawienia" aria-selected="false">Listy</button>
   </nav>
 </header>
 
 <main class="wrap">
   <section class="view" id="v-login" hidden></section>
   <section class="view" id="v-podsumowanie"></section>
-  <section class="view" id="v-wydatki" hidden>
+  <section class="view" id="v-pozycje" hidden>
     <div class="panel">
       <div class="filters">
-        <input class="ctl" type="search" id="q" placeholder="Szukaj: opis, sklep, notatka…" aria-label="Szukaj">
-        <select class="ctl" id="f-pom-f" aria-label="Pomieszczenie"></select>
-        <select class="ctl" id="f-kat-f" aria-label="Kategoria"></select>
-        <select class="ctl" id="f-st-f" aria-label="Status">
+        <input class="ctl" type="search" id="fp-q" placeholder="Szukaj pozycji…" aria-label="Szukaj pozycji">
+        <select class="ctl" id="fp-pom" aria-label="Pomieszczenie"></select>
+        <select class="ctl" id="fp-kat" aria-label="Kategoria"></select>
+        <select class="ctl" id="fp-stan" aria-label="Stan">
           <option value="">Wszystkie</option>
-          <option value="zaplacone">Zapłacone</option>
-          <option value="do-zaplaty">Do zapłaty</option>
+          <option value="otwarte">Do zapłaty</option>
+          <option value="zakonczone">Zakończone</option>
+          <option value="ponad">Ponad planem</option>
+          <option value="bezplanu">Bez planu</option>
         </select>
-        <button class="btn link" id="f-clear" type="button" hidden>Wyczyść filtry</button>
+        <button class="btn link" id="fp-clear" type="button" hidden>Wyczyść filtry</button>
+        <button class="btn" type="button" data-nowa-poz>+ Nowa pozycja</button>
       </div>
-      <div class="fsum" id="fsum"></div>
+      <div class="fsum" id="fp-sum"></div>
     </div>
-    <div id="list"></div>
+    <div id="lista-poz"></div>
+  </section>
+  <section class="view" id="v-platnosci" hidden>
+    <div class="panel">
+      <div class="filters">
+        <input class="ctl" type="search" id="fl-q" placeholder="Szukaj: opis, pozycja, wykonawca…" aria-label="Szukaj płatności">
+        <select class="ctl" id="fl-pom" aria-label="Pomieszczenie"></select>
+        <select class="ctl" id="fl-gdzie" aria-label="Wykonawca lub sklep"></select>
+        <button class="btn link" id="fl-clear" type="button" hidden>Wyczyść filtry</button>
+      </div>
+      <div class="fsum" id="fl-sum"></div>
+    </div>
+    <div id="lista-pl"></div>
   </section>
   <section class="view" id="v-ustawienia" hidden></section>
 </main>
 
-<button class="btn pri fab" id="fab" type="button" hidden>+ Dodaj wydatek</button>
+<button class="btn pri fab" id="fab" type="button" hidden>+ Płatność</button>
 <div id="tip" hidden></div>
 <div id="toast" class="toast" hidden role="status"></div>
 
-<div class="veil" id="veil" hidden>
-  <form class="sheet" id="form" novalidate>
-    <div class="tapebar" aria-hidden="true"></div>
-    <div class="sheet-in">
-      <h2 id="form-h">Nowy wydatek</h2>
-      <div class="fg">
-        <label for="f-opis">Co</label>
-        <input class="ctl" id="f-opis" autocomplete="off" placeholder="np. płytki do łazienki 60×120" required>
-      </div>
-      <div class="two">
-        <div class="fg">
-          <label for="f-kwota">Kwota brutto (zł)</label>
-          <input class="ctl kw" id="f-kwota" inputmode="decimal" autocomplete="off" placeholder="0,00">
-        </div>
-        <div class="fg">
-          <label for="f-data">Data</label>
-          <input class="ctl" id="f-data" type="date">
-        </div>
-      </div>
-      <div class="fg">
-        <span class="lbl" id="st-l">Status</span>
-        <div class="seg" role="group" aria-labelledby="st-l">
-          <button type="button" id="f-st-z" data-st="zaplacone" aria-pressed="true">Zapłacone</button>
-          <button type="button" id="f-st-d" data-st="do-zaplaty" aria-pressed="false">Do zapłaty / wycena</button>
-        </div>
-      </div>
-      <div class="two">
-        <div class="fg">
-          <label for="f-pom">Pomieszczenie</label>
-          <select class="ctl" id="f-pom"></select>
-        </div>
-        <div class="fg">
-          <label for="f-kat">Kategoria</label>
-          <select class="ctl" id="f-kat"></select>
-        </div>
-      </div>
-      <div class="fg">
-        <label for="f-gdzie">Sklep / wykonawca</label>
-        <input class="ctl" id="f-gdzie" list="dl-gdzie" autocomplete="off" placeholder="np. Leroy Merlin, ekipa od płytek">
-        <datalist id="dl-gdzie"></datalist>
-      </div>
-      <div class="fg">
-        <label for="f-notatka">Notatka</label>
-        <textarea class="ctl" id="f-notatka" rows="2" placeholder="nr faktury, gwarancja, ilość…"></textarea>
-      </div>
-      <div class="fg" id="f-files-g">
-        <span class="lbl">Paragony i faktury</span>
-        <div class="files" id="f-files"></div>
-        <input type="file" id="f-file" accept="image/*,application/pdf" multiple hidden>
-        <span class="hint" id="f-files-h"></span>
-      </div>
-      <div class="err" id="f-err" hidden></div>
-      <div class="actions">
-        <div><button class="btn danger" type="button" id="f-del" hidden>Usuń</button></div>
-        <div class="r">
-          <button class="btn" type="button" id="f-cancel">Anuluj</button>
-          <button class="btn" type="button" id="f-save-next">Zapisz i dodaj kolejny</button>
-          <button class="btn pri" type="submit" id="f-save">Zapisz</button>
-        </div>
-      </div>
-    </div>
-  </form>
-</div>
+<div class="veil" id="veil" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h"></div></div>
 
 <script src="app.js"></script>
 </body>
