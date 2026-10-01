@@ -132,16 +132,28 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .karta > .przyp:only-child, .karta > .przyp:first-child { padding-top: 10px; }
 .przyp { margin: 0; padding: 10px 0 12px; font-size: 13.5px; color: var(--tekst-2); }
 .karta.lista-poz > .poz + .poz, .karta.lista-p > * + * { border-top: 1px solid var(--linia); }
-.poz { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; row-gap: 6px; padding: 14px 0; }
-.poz > :not(.kropka) { grid-column: 2; }
-.poz:not(:has(.kropka)) > * { grid-column: 1 / -1; }
-.poz .kropka { grid-row: 1 / span 3; margin-top: 5px; }
-.poz-g { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
-.poz-n { font-weight: 700; font-size: 15.5px; min-width: 0; overflow-wrap: anywhere; }
-.poz-k { font-weight: 600; font-size: 14px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.poz-m { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 13px; color: var(--tekst-2); }
-.poz-m:empty { display: none; }
-.poz .bar { height: 8px; }
+.poz { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 13px 0; }
+.poz-t { display: grid; gap: 1px; min-width: 0; }
+.poz-n { font-weight: 700; font-size: 15.5px; line-height: 1.25; overflow-wrap: anywhere; }
+.poz-m { font-size: 13px; color: var(--tekst-2); }
+.poz-c { display: grid; justify-items: end; gap: 1px; text-align: right; }
+.poz-v { font: 700 17px/1.15 var(--f-disp); letter-spacing: -.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.poz-p { font-size: 12.5px; color: var(--tekst-2); font-weight: 600; white-space: nowrap; }
+.poz-p.zle { color: var(--zle); }
+.kolko { --k: #E4E4EA; position: relative; width: 48px; height: 48px; border-radius: 50%; background: var(--k); display: grid; place-items: center; flex: none; }
+.kolko svg { position: absolute; inset: 0; width: 48px; height: 48px; }
+.kolko-t { fill: none; stroke: rgba(255,255,255,.7); stroke-width: 4.5; }
+.kolko-v { fill: none; stroke: var(--czern); stroke-width: 4.5; stroke-linecap: round; }
+.kolko b { position: relative; font: 800 11.5px/1 var(--f-disp); }
+.kolko-zle { background: var(--uwaga); font: 800 20px/1 var(--f-disp); }
+.kolko b.zero { opacity: .5; }
+.kolko-pelne { box-shadow: inset 0 0 0 3px var(--czern); }
+.kolko-pelne .ik { stroke-width: 2.2; width: 18px; height: 18px; }
+.pakiet-grupa { margin-top: 12px; }
+.pakiet-gl { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0 12px; border-bottom: 1px dashed rgba(0,0,0,.25); }
+.pakiet-gl > span:first-child { display: grid; gap: 2px; min-width: 0; font-size: 13px; color: var(--tekst-2); }
+.pakiet-gl b { color: var(--czern); font-size: 15px; }
+.odstep { margin: 0 0 14px !important; }
 .kropka { width: 12px; height: 12px; border-radius: 50%; flex: none; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
 
 .pl { display: grid; gap: 2px; width: 100%; border: 0; background: none; text-align: left; padding: 13px 0; cursor: pointer; }
@@ -232,16 +244,10 @@ textarea.pole { resize: vertical; }
 }
 
 /* dolny pasek */
-#nav { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); z-index: 30; width: min(calc(100% - 32px), 420px); height: 66px; border-radius: 99px; background: var(--czern); display: grid; grid-template-columns: 1fr 1fr 74px 1fr 1fr; align-items: center; padding: 0 8px; box-shadow: 0 10px 30px rgba(0,0,0,.22); }
+#nav { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); z-index: 30; width: min(calc(100% - 32px), 420px); height: 66px; border-radius: 99px; background: var(--czern); display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; padding: 0 8px; box-shadow: 0 10px 30px rgba(0,0,0,.22); }
 #nav a { height: 48px; display: grid; place-items: center; color: rgba(255,255,255,.62); border-radius: 99px; }
 #nav a.on { color: #fff; }
 #nav a.on .ik { stroke-width: 2.3; }
-#nav-plus { justify-self: center; width: 58px; height: 58px; margin-top: -30px; border-radius: 50%; border: 5px solid var(--tlo); background: var(--zolty); color: var(--czern); display: grid; place-items: center; cursor: pointer; transition: transform .15s; }
-#nav-plus .ik { width: 26px; height: 26px; stroke-width: 2.4; }
-#nav-plus.otwarty { transform: rotate(45deg); }
-#menu-plus { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); z-index: 31; width: min(calc(100% - 48px), 360px); background: var(--lawenda); border-radius: var(--r-duzy); padding: 14px; display: grid; gap: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.18); }
-#menu-plus p { margin: 2px 6px 4px; font: 700 18px/1.2 var(--f-disp); }
-#menu-plus button { display: flex; align-items: center; justify-content: space-between; min-height: 54px; padding: 0 18px; border-radius: 99px; border: 0; background: rgba(255,255,255,.7); font-weight: 700; font-size: 15.5px; cursor: pointer; }
 
 #toast { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 12px); z-index: 70; background: var(--czern); color: #fff; padding: 12px 20px; border-radius: 99px; font-weight: 600; font-size: 14px; max-width: calc(100% - 32px); text-align: center; }
 .lightbox { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.88); display: grid; place-items: center; padding: 16px; }
@@ -251,22 +257,17 @@ textarea.pole { resize: vertical; }
 <body>
 <div id="app"><main id="ekran"></main></div>
 
-<div id="menu-plus" hidden>
-  <p>Co dodajesz?</p>
-  <button type="button" data-menu="pl">Płatność <svg class="ik" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h17v12h-17zM3.5 11h17M15.5 15.5h2"/></svg></button>
-  <button type="button" data-menu="poz">Pozycja do planu <svg class="ik" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg></button>
-</div>
+
 
 <nav id="nav" aria-label="Nawigacja">
   <a href="#dom" data-ekran="dom" aria-label="Dom"><svg class="ik" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 10.5 12 4l8.5 6.5V20a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z"/></svg></a>
   <a href="#lista" data-ekran="lista" aria-label="Wszystkie pozycje"><svg class="ik" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg></a>
-  <button id="nav-plus" type="button" aria-label="Dodaj"><svg class="ik" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
   <a href="#platnosci" data-ekran="platnosci" aria-label="Płatności"><svg class="ik" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h17v12h-17zM3.5 11h17M15.5 15.5h2"/></svg></a>
   <a href="#ustawienia" data-ekran="ustawienia" aria-label="Ustawienia"><svg class="ik" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4"/></svg></a>
 </nav>
 
 <div id="zaslona" hidden><div id="arkusz" role="dialog" aria-modal="true"></div></div>
 <div id="toast" role="status" hidden></div>
-<script src="app.js?v=3"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

@@ -181,6 +181,7 @@ const IKONY = {
   kotlownia: "M12 3c1.8 3.6 6 5.6 6 10.8a6 6 0 0 1-12 0c0-2.8 1.6-4.6 2.8-5.6 0 1.8.9 2.8 1.9 2.8 0-2.7-.9-4.6 1.3-8z",
   zewnatrz: "M12 21v-4.5M6.5 16.5h11L12 4z",
   inne: "M5 5h6v6H5zM13 5h6v6h-6zM5 13h6v6H5zM13 13h6v6h-6z",
+  ok: "M5 12.5l4.5 4.5L19 7.5",
 };
 const ikona = (k, rozm = 22) => `<svg class="ik" width="${rozm}" height="${rozm}" viewBox="0 0 24 24" aria-hidden="true"><path d="${IKONY[k] || IKONY.inne}"/></svg>`;
 function ikonaPom(id) {
@@ -203,12 +204,23 @@ function stanPozycji(x) {
   if (x.bezPlanu && x.zapl) return `<span class="tag uwaga">bez planu</span>`;
   return "";
 }
-function wierszPozycji(x, zKolorem) {
+function kolkoPozycji(x) {
+  const tlo = x.p.zakup ? "#E4E4EA" : kolorPom(x.p.pom);
+  const zle = !x.wPakiecie && (x.ponad || (x.bezPlanu && x.zapl));
+  const pelne = x.plan && x.zapl >= x.plan;
+  if (x.p.zakonczona || pelne) return `<span class="kolko kolko-pelne" style="--k:${tlo}">${ikona("ok", 22)}</span>`;
+  if (!x.plan) return `<span class="kolko" style="--k:${tlo}"><b>zł</b></span>`;
+  if (zle) return `<span class="kolko kolko-zle">!</span>`;
+  const proc = x.plan ? Math.min(Math.round((x.zapl / x.plan) * 100), 100) : 0, r = 19, c = 2 * Math.PI * r;
+  return `<span class="kolko" style="--k:${tlo}"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="${r}" class="kolko-t"/>${proc ? `<circle cx="24" cy="24" r="${r}" class="kolko-v" stroke-dasharray="${(c * proc) / 100} ${c}" transform="rotate(-90 24 24)"/>` : ""}</svg><b class="${proc ? "" : "zero"}">${proc}%</b></span>`;
+}
+function wierszPozycji(x, gdzie) {
+  const kat = nazwaKat(x.p.kat), pod = [gdzie ? (x.p.zakup ? "Zakup domu" : nazwaPom(x.p.pom)) : "", kat && kat !== x.p.nazwa ? kat : "", x.p.produkty?.length ? `${x.p.produkty.length} prod.` : ""].filter(Boolean);
+  const plan = x.p.zakonczona ? "zakończone" : x.ponad ? `ponad plan o ${zl(x.zapl - x.plan)}` : x.plan ? `z ${zl(x.plan)}` : x.wPakiecie ? "z budżetu pakietu" : "bez planu";
   return `<a class="poz" href="#poz/${esc(x.p.id)}">
-    ${zKolorem ? `<span class="kropka" style="background:${x.p.zakup ? "#E4E4EA" : kolorPom(x.p.pom)}"></span>` : ""}
-    <span class="poz-g"><span class="poz-n">${esc(x.p.nazwa)}</span><span class="poz-k">${zl(x.zapl)}${x.plan ? ` z ${zl(x.plan)}` : ""}</span></span>
-    <span class="poz-m">${[nazwaKat(x.p.kat), x.p.produkty?.length ? `${x.p.produkty.length} prod.` : ""].filter(Boolean).map(esc).join(", ")}${stanPozycji(x)}</span>
-    ${pasek(x.zapl, x.zostalo, x.plan)}
+    ${kolkoPozycji(x)}
+    <span class="poz-t"><span class="poz-n">${esc(x.p.nazwa)}</span>${pod.length ? `<span class="poz-m">${pod.map(esc).join(", ")}</span>` : ""}</span>
+    <span class="poz-c"><span class="poz-v">${kw(x.zapl)}</span><span class="poz-p ${x.ponad && !x.wPakiecie ? "zle" : ""}">${plan}</span></span>
   </a>`;
 }
 function wierszPlatnosci(pl, bezPozycji) {
@@ -272,9 +284,16 @@ function ekranPom(id) {
   const xs = wykonczenie().filter((x) => x.p.pom === id), s = suma(xs);
   let h = naglowek(esc(r.nazwa), "#dom");
   h += `<section class="hero" style="--k:${kolorPom(id)}"><div class="hero-g"><div><p class="hero-l">Do wydania</p><p class="hero-v">${kw(s.zostalo)}</p><p class="hero-s">zapłacone ${zl(s.zapl)} z ${zl(s.plan)}</p></div><span class="okr-b duza">${ikonaPom(id)}</span></div>${pasek(s.zapl, s.zostalo, s.plan)}</section>`;
-  h += `<div class="sekcja-h"><h2>${xs.length ? `Pozycje (${xs.length})` : "Pozycje"}</h2></div>`;
-  h += xs.length ? `<div class="karta lista-poz">${xs.map((x) => wierszPozycji(x)).join("")}</div>` : "";
-  h += `<button class="dodaj-wiersz" type="button" data-nowa-poz="${esc(id)}">${ikona("plus", 20)}<span>Dodaj pozycję w: ${esc(r.nazwa)}</span></button>`;
+  const luzne = xs.filter((x) => !x.wPakiecie);
+  const pakiety = [...new Set(xs.filter((x) => x.wPakiecie).map((x) => x.wPakiecie.id))].map((pid) => S.pakiety.get(pid));
+  h += `<div class="sekcja-h"><h2>Pozycje</h2><span class="szary">${xs.length}</span></div>`;
+  if (luzne.length) h += `<div class="karta lista-poz">${luzne.map((x) => wierszPozycji(x)).join("")}</div>`;
+  for (const g of pakiety) {
+    const tu = xs.filter((x) => x.wPakiecie?.id === g.pk.id);
+    h += `<div class="karta lista-poz pakiet-grupa"><a class="pakiet-gl" href="#lista/pakiet:${esc(g.pk.id)}"><span><b>${esc(g.pk.nazwa)}</b><span>wspólny budżet: zapłacone ${zl(g.zapl)} z ${zl(g.plan)}</span></span><span class="poz-c"><span class="poz-v">${kw(g.zostalo)}</span><span class="poz-p">zostało</span></span></a>${tu.map((x) => wierszPozycji(x)).join("")}</div>`;
+  }
+  if (!xs.length) h += `<p class="pusto">Nie ma tu jeszcze pozycji. Dodaj pierwszą, np. „Lampy” albo „Malowanie”.</p>`;
+  h += `<button class="btn-czarny szeroki" type="button" data-nowa-poz="${esc(id)}">${ikona("plus", 20)} Dodaj pozycję</button>`;
   return h;
 }
 
@@ -334,6 +353,7 @@ function wynikiListy() {
 function ekranPlatnosci() {
   const g = S.fp.gdzie;
   return `${naglowek("Płatności")}
+  <button class="btn-czarny szeroki odstep" type="button" data-nowa-pl="">${ikona("plus", 20)} Dodaj płatność</button>
   <div class="chipy" role="group" aria-label="Wykonawca lub sklep"><button class="chip ${!g ? "on" : ""}" type="button" data-fp-gdzie="">Wszyscy</button>${wykonawcy().map((w) => `<button class="chip ${g === w ? "on" : ""}" type="button" data-fp-gdzie="${esc(w)}">${esc(w)}</button>`).join("")}</div>
   <div id="wyniki"></div>`;
 }
@@ -657,13 +677,6 @@ function render() {
   if (przewin) window.scrollTo(0, 0);
 }
 function odswiezWyniki() { const w = $("#wyniki"); if (w) w.innerHTML = S.ekran.typ === "lista" ? wynikiListy() : wynikiPlatnosci(); }
-function przyciskPlus() {
-  const e = S.ekran;
-  if (e.typ === "pom") return arkuszNowejPozycji(e.id);
-  if (e.typ === "poz") return arkuszPlatnosci(null, e.id);
-  S.menu = !S.menu; $("#menu-plus").hidden = !S.menu; $("#nav-plus").classList.toggle("otwarty", S.menu);
-}
-function zamknijMenu() { S.menu = false; $("#menu-plus").hidden = true; $("#nav-plus").classList.remove("otwarty"); }
 
 /* ---------- wczytanie i odświeżanie ---------- */
 async function wczytaj() {
@@ -679,13 +692,10 @@ async function odswiez() {
 
 /* ---------- zdarzenia ---------- */
 function wire() {
-  window.addEventListener("hashchange", () => { zamknijMenu(); render(); });
+  window.addEventListener("hashchange", render);
   window.addEventListener("popstate", () => { if (S.cichyPop) { S.cichyPop = false; return; } if (S.sheet) ukryjArkusz(); });
-  $("#nav-plus").addEventListener("click", przyciskPlus);
   document.addEventListener("click", (ev) => {
     const t = ev.target;
-    if (S.menu && !t.closest("#menu-plus") && !t.closest("#nav-plus")) zamknijMenu();
-    const m = t.closest("[data-menu]"); if (m) { zamknijMenu(); m.dataset.menu === "pl" ? arkuszPlatnosci(null, "") : arkuszNowejPozycji(""); return; }
     if (t.closest("[data-zamknij]")) { zamknijArkusz(); return; }
     const plB = t.closest("[data-pl]"); if (plB) { arkuszPlatnosci(plB.dataset.pl); return; }
     const np = t.closest("[data-nowa-poz]"); if (np) { arkuszNowejPozycji(np.dataset.nowaPoz); return; }
@@ -742,7 +752,7 @@ function wire() {
     }
   });
   $("#zaslona").addEventListener("click", (e) => { if (e.target.id === "zaslona") zamknijArkusz(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { const lb = $(".lightbox"); if (lb) lb.remove(); else if (S.sheet) zamknijArkusz(); else if (S.menu) zamknijMenu(); } });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { const lb = $(".lightbox"); if (lb) lb.remove(); else if (S.sheet) zamknijArkusz(); } });
   document.addEventListener("visibilitychange", odswiez);
   setInterval(odswiez, 15000);
 }
