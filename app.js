@@ -315,7 +315,7 @@ function wierszPoz(x) {
   return `<button class="row poz" type="button" data-poz="${esc(x.p.id)}"><span class="n">${esc(x.p.nazwa)}</span>
     <span class="a num">${zl(x.zapl)}${x.plan ? ` <span style="color:var(--muted)">/ ${zl(x.plan)}</span>` : ""}</span>
     ${tasma(x.zapl, x.zostalo, x.plan)}
-    <span class="m"><span>${esc(nazwaKat(x.p.kat))} · ${x.n} ${x.n === 1 ? "płatność" : "płatności"}${x.zostalo && !x.p.zakonczona ? ` · zostało ${zl(x.zostalo)}` : ""}</span>${pigulka(x)}</span></button>`;
+    <span class="m"><span>${esc(nazwaKat(x.p.kat))} · ${x.n} ${x.n === 1 ? "płatność" : "płatności"}${x.p.produkty?.length ? ` · ${x.p.produkty.length} prod. za ${zl(x.p.produkty.reduce((a, q) => a + (q.cenaGr || 0), 0))}` : ""}${x.zostalo && !x.p.zakonczona ? ` · zostało ${zl(x.zostalo)}` : ""}</span>${pigulka(x)}</span></button>`;
 }
 function renderPozycje() {
   const f = S.fp;
@@ -414,8 +414,8 @@ function pobierzCsv(nazwa, rows) {
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 function csvPozycje() {
-  const rows = [["Pomieszczenie", "Pozycja", "Kategoria", "Plan", "Zapłacone", "Zostało", "Zakończona", "Zakup domu", "Pakiet", "Notatka"]];
-  for (const x of licz().values()) rows.push([nazwaPom(x.p.pom), x.p.nazwa, nazwaKat(x.p.kat), { gr: x.plan }, { gr: x.zapl }, { gr: x.zostalo }, x.p.zakonczona ? "tak" : "", x.p.zakup ? "tak" : "", nazwaPak(x.p.pakiet), x.p.notatka]);
+  const rows = [["Pomieszczenie", "Pozycja", "Kategoria", "Plan", "Zapłacone", "Zostało", "Zakończona", "Zakup domu", "Pakiet", "Produkty", "Notatka"]];
+  for (const x of licz().values()) rows.push([nazwaPom(x.p.pom), x.p.nazwa, nazwaKat(x.p.kat), { gr: x.plan }, { gr: x.zapl }, { gr: x.zostalo }, x.p.zakonczona ? "tak" : "", x.p.zakup ? "tak" : "", nazwaPak(x.p.pakiet), (x.p.produkty || []).map((q) => `${q.nazwa} ${q.model || ""} ${f2.format(q.cenaGr / 100)} zł`.replace(/\s+/g, " ")).join(" | "), x.p.notatka]);
   pobierzCsv("koszty-pozycje", rows);
 }
 function csvPlatnosci() {
@@ -447,13 +447,85 @@ function otworzPoz(id) {
     ${p ? `<div class="pozsum"><div><span class="lbl">Zapłacone</span><b class="num">${zl2(x.zapl)}</b></div><div><span class="lbl">Plan</span><b class="num">${x.plan ? zl2(x.plan) : "—"}</b></div><div><span class="lbl">Zostało</span><b class="num">${zl2(x.zostalo)}</b></div></div>${tasma(x.zapl, x.zostalo, x.plan)}
       ${x.wPakiecie ? (() => { const g = S.pakiety.get(x.wPakiecie.id); return `<p class="hint" style="margin:0">W pakiecie „${esc(g.pk.nazwa)}”: plan ${zl(g.plan)}, zapłacone ${zl(g.zapl)}, zostało ${zl(g.zostalo)}. „Zostało” tej pozycji to jej część kwoty pakietu.</p>`; })() : ""}
       <div class="fg"><div class="pl-head"><span class="lbl">Płatności (${pl.length})</span><button class="btn" type="button" data-nowa-pl="${esc(p.id)}">+ Dodaj płatność</button></div>
-      ${pl.length ? `<div>${pl.map(wierszPl).join("")}</div>` : `<p class="hint" style="margin:0">Brak płatności.</p>`}</div>` : ""}
+      ${pl.length ? `<div>${pl.map(wierszPl).join("")}</div>` : `<p class="hint" style="margin:0">Brak płatności.</p>`}</div>
+      ${sekcjaProduktow(p)}` : ""}
     <div class="err" id="p-err" hidden></div>
     <div class="actions"><div>${p ? `<button class="btn danger" type="button" id="p-del">Usuń pozycję</button>` : ""}</div>
       <div class="r"><button class="btn" type="button" data-zamknij>Anuluj</button><button class="btn pri" type="submit">Zapisz</button></div></div>
   </form>`;
   pokazSheet(p ? null : "#p-nazwa");
 }
+/* ---------- produkty (konkretne modele w pozycji) ---------- */
+const kupioneProdukty = () => new Set(platnosci().filter((q) => q.produkt).map((q) => q.produkt));
+function sekcjaProduktow(p) {
+  const pr = p.produkty || [], razem = pr.reduce((a, x) => a + (x.cenaGr || 0), 0), kup = kupioneProdukty();
+  const roznica = razem - (p.planGr || 0);
+  return `<div class="fg"><div class="pl-head"><span class="lbl">Wybrane produkty (${pr.length})${pr.length ? ` · razem ${zl(razem)}` : ""}</span><button class="btn" type="button" data-nowy-prod="${esc(p.id)}">+ Produkt</button></div>
+    ${pr.length && p.planGr ? `<p class="hint" style="margin:0">${roznica > 0 ? `<span style="color:var(--bad)">O ${zl(roznica)} więcej niż plan pozycji (${zl(p.planGr)}).</span>` : `Mieści się w planie pozycji, zapas ${zl(-roznica)}.`}</p>` : ""}
+    ${pr.length ? `<div>${pr.map((x) => `<div class="prod">
+        <button class="prod-n" type="button" data-prod="${esc(p.id)}|${esc(x.id)}"><span class="t">${esc(x.nazwa)}</span><span class="mm">${esc([x.model, x.sklep].filter(Boolean).join(" · "))}${x.notatka ? ` · <span style="color:var(--warn)">${esc(x.notatka)}</span>` : ""}</span></button>
+        <span class="num">${zl(x.cenaGr)}</span>
+        <span class="prod-a">${x.link ? `<a class="btn link" href="${esc(x.link)}" target="_blank" rel="noopener">sklep</a>` : ""}${kup.has(x.id) ? `<span class="pill ok">kupione</span>` : `<button class="btn" type="button" data-kup="${esc(p.id)}|${esc(x.id)}">Kupione</button>`}</span>
+      </div>`).join("")}</div>` : `<p class="hint" style="margin:0">Dodaj konkretne modele z cenami, żeby widzieć, czy mieszczą się w planie.</p>`}</div>`;
+}
+function otworzProd(pozId, prodId) {
+  const p = poz(pozId), x = (p?.produkty || []).find((q) => q.id === prodId);
+  S.sheet = { typ: "prod", pozId, id: x?.id || null };
+  $("#sheet").innerHTML = `<div class="tapebar" aria-hidden="true"></div><form class="sheet-in" id="form-prod" novalidate>
+    <h2 id="sheet-h">${x ? "Produkt" : "Nowy produkt"} <span class="hint">· ${esc(p?.nazwa || "")}</span></h2>
+    <div class="fg"><label for="pr-nazwa">Nazwa</label><input class="ctl" id="pr-nazwa" value="${esc(x?.nazwa || "")}" placeholder="np. Piekarnik Bosch Serie 2" autocomplete="off"></div>
+    <div class="two">
+      <div class="fg"><label for="pr-model">Model</label><input class="ctl" id="pr-model" value="${esc(x?.model || "")}" placeholder="np. HQG572EB4" autocomplete="off"></div>
+      <div class="fg"><label for="pr-cena">Cena (zł)</label><input class="ctl kw" id="pr-cena" inputmode="decimal" value="${x ? f2.format(x.cenaGr / 100) : ""}" placeholder="0,00"></div>
+    </div>
+    <div class="two">
+      <div class="fg"><label for="pr-sklep">Sklep</label><input class="ctl" id="pr-sklep" value="${esc(x?.sklep || "")}" placeholder="np. RTV Euro AGD" autocomplete="off"></div>
+      <div class="fg"><label for="pr-link">Link</label><input class="ctl" id="pr-link" type="url" value="${esc(x?.link || "")}" placeholder="https://…" autocomplete="off"></div>
+    </div>
+    <div class="fg"><label for="pr-notatka">Notatka</label><input class="ctl" id="pr-notatka" value="${esc(x?.notatka || "")}" autocomplete="off"></div>
+    <div class="err" id="pr-err" hidden></div>
+    <div class="actions"><div>${x ? `<button class="btn danger" type="button" id="pr-del">Usuń produkt</button>` : ""}</div>
+      <div class="r"><button class="btn" type="button" data-zamknij>Anuluj</button><button class="btn pri" type="submit">Zapisz</button></div></div>
+  </form>`;
+  pokazSheet(x ? null : "#pr-nazwa");
+}
+async function zapiszProd() {
+  const e = S.sheet, nazwa = $("#pr-nazwa").value.trim(), cena = parseKwota($("#pr-cena").value);
+  const link = $("#pr-link").value.trim();
+  const blad = !nazwa ? "Wpisz nazwę produktu." : cena === null || cena <= 0 ? "Wpisz cenę, np. 3449." : link && !/^https?:\/\//i.test(link) ? "Link musi zaczynać się od https://" : "";
+  if (blad) { const er = $("#pr-err"); er.textContent = blad; er.hidden = false; return; }
+  const id = e.id || losoweId();
+  const dane = { id, nazwa, model: $("#pr-model").value.trim(), cenaGr: cena, sklep: $("#pr-sklep").value.trim(), link, notatka: $("#pr-notatka").value.trim() };
+  try {
+    await zmien(`Produkt: ${nazwa}, ${zl2(cena)} (${poz(e.pozId)?.nazwa || ""})`, (d) => {
+      const p = d.pozycje.find((q) => q.id === e.pozId); if (!p) return;
+      p.produkty ??= [];
+      const i = p.produkty.findIndex((q) => q.id === id);
+      if (i >= 0) p.produkty[i] = dane; else p.produkty.push(dane);
+    });
+    toast(`Zapisano produkt: ${nazwa}`); otworzPoz(e.pozId);
+  } catch (err) { bladZapisu(err); }
+}
+async function usunProd() {
+  const e = S.sheet, b = $("#pr-del");
+  if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Na pewno usunąć?"; return; }
+  try {
+    await zmien(`Usunięto produkt z pozycji ${poz(e.pozId)?.nazwa || ""}`, (d) => {
+      const p = d.pozycje.find((q) => q.id === e.pozId); if (p) p.produkty = (p.produkty || []).filter((q) => q.id !== e.id);
+    });
+    otworzPoz(e.pozId);
+  } catch (err) { bladZapisu(err); }
+}
+function kupProdukt(pozId, prodId) {
+  const x = (poz(pozId)?.produkty || []).find((q) => q.id === prodId); if (!x) return;
+  otworzPl(null, pozId, pozId);
+  S.sheet.produkt = prodId;
+  $("#pl-kwota").value = f2.format(x.cenaGr / 100);
+  $("#pl-opis").value = [x.nazwa, x.model].filter(Boolean).join(" ");
+  if (x.sklep) $("#pl-gdzie").value = x.sklep;
+  $("#sheet-h").textContent = "Płatność za produkt";
+}
+
 async function zapiszPoz() {
   const id = S.sheet.id || losoweId();
   const nazwa = $("#p-nazwa").value.trim(), planTxt = $("#p-plan").value.trim();
@@ -547,6 +619,7 @@ async function zapiszPl(kolejna) {
   const id = e.id || losoweId(), stara = platnosci().find((q) => q.id === e.id);
   const doc = { id, pozycja: pozId, data: $("#pl-data").value || "", kwotaGr: kw, opis: $("#pl-opis").value.trim(), gdzie: $("#pl-gdzie").value.trim(), notatka: $("#pl-notatka").value.trim(), pliki: e.pliki, utworzono: stara?.utworzono || new Date().toISOString() };
   if (stara?.zrodlo) doc.zrodlo = stara.zrodlo;
+  if (e.produkt || stara?.produkt) doc.produkt = e.produkt || stara.produkt;
   const usuniete = (stara?.pliki || []).filter((p) => !e.pliki.some((q) => q.id === p.id)).map((p) => p.id);
   const nazwa = poz(pozId)?.nazwa || "";
   for (const b of document.querySelectorAll("#pl-save,#pl-next")) b.disabled = true;
@@ -585,6 +658,7 @@ function zamknij(anulowano) {
   const e = S.sheet;
   if (anulowano && e?.typ === "pl" && e.nowe?.length) for (const p of e.nowe) usunPlik(p);
   if (anulowano && e?.typ === "pl" && e.powrot) { otworzPoz(e.powrot); return; }
+  if (anulowano && e?.typ === "prod") { otworzPoz(e.pozId); return; }
   S.sheet = null; $("#veil").hidden = true; document.body.style.overflow = "";
 }
 
@@ -644,6 +718,10 @@ function wire() {
     const pozB = t.closest("[data-poz]"); if (pozB) { otworzPoz(pozB.dataset.poz); return; }
     const nPl = t.closest("[data-nowa-pl]"); if (nPl) { otworzPl(null, nPl.dataset.nowaPl, nPl.dataset.nowaPl); return; }
     if (t.closest("[data-nowa-poz]")) { otworzPoz(null); return; }
+    const np = t.closest("[data-nowy-prod]"); if (np) { otworzProd(np.dataset.nowyProd, null); return; }
+    const pr = t.closest("[data-prod]"); if (pr) { const [a, b] = pr.dataset.prod.split("|"); otworzProd(a, b); return; }
+    const kp = t.closest("[data-kup]"); if (kp) { const [a, b] = kp.dataset.kup.split("|"); kupProdukt(a, b); return; }
+    if (t.id === "pr-del") { usunProd(); return; }
     if (t.closest("[data-zamknij]")) { zamknij(true); return; }
     const fp = t.closest("[data-fpom]"); if (fp) { S.fp = { q: "", pom: fp.dataset.fpom, kat: "", stan: "", pak: "" }; idz("pozycje"); return; }
     const fpk = t.closest("[data-fpak]"); if (fpk) { S.fp = { q: "", pom: "", kat: "", stan: "", pak: fpk.dataset.fpak }; idz("pozycje"); return; }
@@ -677,6 +755,7 @@ function wire() {
     ev.preventDefault();
     if (f.id === "form-poz") { zapiszPoz(); return; }
     if (f.id === "form-pl") { zapiszPl(false); return; }
+    if (f.id === "form-prod") { zapiszProd(); return; }
     if (f.id === "u-add-pom" || f.id === "u-add-kat" || f.id === "u-add-pak") {
       const inp = f.querySelector("input"), n = inp.value.trim(); if (!n) return;
       const typ = f.id.slice(6);
