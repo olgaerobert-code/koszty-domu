@@ -24,16 +24,7 @@ const losoweId = () => Date.now().toString(36) + Math.random().toString(36).slic
 const klon = (o) => JSON.parse(JSON.stringify(o));
 const dataPL = (d) => d ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(2, 4)}` : "—";
 
-function parseKwota(s) {
-  s = String(s ?? "").replace(/zł|pln/gi, "").replace(/[\s  ']/g, "");
-  if (!s) return null;
-  if (s.includes(",") && s.includes(".")) {
-    s = s.lastIndexOf(",") > s.lastIndexOf(".") ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
-  } else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
-  else s = s.replace(",", ".");
-  const n = Number(s);
-  return Number.isFinite(n) ? Math.round(n * 100) : null;
-}
+const parseKwota = (t) => Logika.parseKwota(t);
 
 /* ---------- Supabase jako baza ---------- */
 const b64enc = (bytes) => { let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(bin); };
@@ -101,9 +92,13 @@ const S = {
   ekran: { typ: "dom" },
   fl: { q: "", stan: "", pom: "" },
   fp: { gdzie: "" },
-  sheet: null, menu: false, usuwanie: null, ostatnie: {},
+  sheet: null, menu: false, usuwanie: null, ostatnie: {}, liczby: {}, pierwszyDom: true, swieze: new Set(),
 };
-function ustawDane(d) { S.dane = d; S.gotowe = true; S.calc = null; render(); }
+function ustawDane(d) {
+  const swieze = Logika.noweKupione(S.dane?.platnosci, d.platnosci || []);
+  if (swieze.size) { S.swieze = swieze; setTimeout(() => { S.swieze = new Set(); }, 1500); }
+  S.dane = d; S.gotowe = true; S.calc = null; render();
+}
 const pom = () => S.dane?.ustawienia.pomieszczenia || [];
 const kat = () => S.dane?.ustawienia.kategorie || [];
 const pak = () => S.dane?.ustawienia.pakiety || [];
@@ -116,41 +111,13 @@ const nazwaPom = (id) => pom().find((p) => p.id === id)?.nazwa || "Bez pomieszcz
 const nazwaKat = (id) => kat().find((k) => k.id === id)?.nazwa || "";
 const poz = (id) => pozycje().find((p) => p.id === id);
 
-/* Plan obejmuje to, co już zapłacone: pozycja ma do zapłaty plan minus zapłacone (zakończona: nic) */
 function licz() {
   if (S.calc) return S.calc;
-  const m = new Map();
-  for (const p of pozycje()) m.set(p.id, { p, zapl: 0, n: 0 });
-  for (const pl of platnosci()) { const x = m.get(pl.pozycja); if (x) { x.zapl += pl.kwotaGr || 0; x.n++; } }
-  for (const x of m.values()) {
-    x.plan = x.p.planGr || 0;
-    x.zostalo = x.p.zakonczona ? 0 : Math.max(x.plan - x.zapl, 0);
-    x.ponad = x.plan > 0 && x.zapl > x.plan;
-    x.bezPlanu = !x.plan;
-  }
-  /* Pakiet (np. Kazik: robocizna + materiały) liczy budżet wspólnie: zostało = suma planów − suma wpłat
-     (nie więcej niż suma tego, co zostało w pozycjach). Kwota jest rozkładana na pozycje proporcjonalnie,
-     żeby sumy pomieszczeń i kategorii się zgadzały. Pojedyncza pozycja w pakiecie nie jest „ponad planem”. */
-  S.pakiety = new Map();
-  for (const pk of pak()) {
-    const xs = [...m.values()].filter((x) => x.p.pakiet === pk.id);
-    if (!xs.length) continue;
-    const plan = xs.reduce((a, x) => a + x.plan, 0), zapl = xs.reduce((a, x) => a + x.zapl, 0), ind = xs.reduce((a, x) => a + x.zostalo, 0);
-    const zostalo = Math.min(Math.max(plan - zapl, 0), ind);
-    let reszta = zostalo;
-    const otwarte = xs.filter((x) => x.zostalo > 0).sort((a, b) => b.zostalo - a.zostalo);
-    otwarte.forEach((x, i) => { const v = i === otwarte.length - 1 ? reszta : Math.round((x.zostalo * zostalo) / ind); x.zostalo = v; reszta -= v; });
-    for (const x of xs) { x.ponad = false; x.bezPlanu = false; x.wPakiecie = pk; }
-    S.pakiety.set(pk.id, { pk, xs, plan, zapl, zostalo, ponad: zapl > plan });
-  }
-  S.calc = m;
-  return m;
+  const { mapa, pakiety } = Logika.policz(S.dane || { pozycje: [], platnosci: [], ustawienia: {} });
+  S.pakiety = pakiety; S.calc = mapa;
+  return mapa;
 }
-function suma(lista) {
-  const s = { plan: 0, zapl: 0, zostalo: 0, n: 0 };
-  for (const x of lista) { s.plan += x.plan; s.zapl += x.zapl; s.zostalo += x.zostalo; s.n++; }
-  return s;
-}
+const suma = (lista) => Logika.suma(lista);
 const wykonczenie = () => [...licz().values()].filter((x) => !x.p.zakup);
 const zakup = () => [...licz().values()].filter((x) => x.p.zakup);
 const wykonawcy = () => [...new Set(platnosci().map((p) => p.gdzie).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
@@ -192,6 +159,29 @@ function ikonaPom(id) {
 
 /* ---------- drobne elementy ---------- */
 const kw = (gr) => `${f0.format(Math.round((gr || 0) / 100))}<small> zł</small>`;
+const bezRuchu = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+/* Kwota, która przy zmianie „nabija się” od ostatnio pokazanej wartości (S.liczby[klucz]).
+   Przy pierwszym otwarciu ekranu głównego startuje od zera. */
+function kwL(klucz, gr) {
+  const doGr = Math.round(gr || 0), znane = S.liczby[klucz];
+  const od = znane ?? (S.pierwszyDom && klucz.startsWith("dom-") ? 0 : doGr);
+  return `<span data-licz="${klucz}" data-od="${od}" data-do="${doGr}">${f0.format(Math.round(od / 100))}</span><small> zł</small>`;
+}
+function animujLiczby() {
+  for (const el of document.querySelectorAll("[data-licz]")) {
+    const k = el.dataset.licz, od = +el.dataset.od, doGr = +el.dataset.do;
+    S.liczby[k] = doGr;
+    if (od === doGr || bezRuchu()) { el.textContent = f0.format(Math.round(doGr / 100)); continue; }
+    const start = performance.now(), czas = 900;
+    const krok = (t) => {
+      const v = Logika.wartoscLicznika(od / 100, doGr / 100, (t - start) / czas);
+      el.textContent = f0.format(v);
+      if (t - start < czas && document.contains(el)) requestAnimationFrame(krok);
+    };
+    requestAnimationFrame(krok);
+  }
+  S.pierwszyDom = false;
+}
 function pasek(zapl, zostalo, plan) {
   const max = Math.max(plan, zapl + zostalo, 1);
   const a = (zapl / max) * 100, b = (zostalo / max) * 100;
@@ -217,7 +207,7 @@ function kolkoPozycji(x) {
 function wierszPozycji(x, gdzie) {
   const kat = nazwaKat(x.p.kat), pod = [gdzie ? (x.p.zakup ? "Zakup domu" : nazwaPom(x.p.pom)) : "", kat && kat !== x.p.nazwa ? kat : "", x.p.produkty?.length ? `${x.p.produkty.length} prod.` : ""].filter(Boolean);
   const plan = x.p.zakonczona ? "zakończone" : x.ponad ? `ponad plan o ${zl(x.zapl - x.plan)}` : x.plan ? `z ${zl(x.plan)}` : x.wPakiecie ? "z budżetu pakietu" : "bez planu";
-  return `<a class="poz" href="#poz/${esc(x.p.id)}">
+  return `<a class="poz" href="#poz/${esc(x.p.id)}" style="view-transition-name:poz-${esc(x.p.id)}">
     ${kolkoPozycji(x)}
     <span class="poz-t"><span class="poz-n">${esc(x.p.nazwa)}</span>${pod.length ? `<span class="poz-m">${pod.map(esc).join(", ")}</span>` : ""}</span>
     <span class="poz-c"><span class="poz-v">${kw(x.zapl)}</span><span class="poz-p ${x.ponad && !x.wPakiecie ? "zle" : ""}">${plan}</span></span>
@@ -231,7 +221,9 @@ function wierszPlatnosci(pl, bezPozycji) {
 }
 function pierscien(proc) {
   const r = 30, c = 2 * Math.PI * r, p = Math.max(0, Math.min(proc, 100));
-  return `<svg class="ring" viewBox="0 0 76 76" aria-hidden="true"><circle cx="38" cy="38" r="${r}" class="ring-t"/><circle cx="38" cy="38" r="${r}" class="ring-v" stroke-dasharray="${(c * p) / 100} ${c}" transform="rotate(-90 38 38)"/></svg>`;
+  const poprz = S.liczby["dom-proc"] ?? (S.pierwszyDom ? 0 : p); S.liczby["dom-proc"] = p;
+  const rysuj = poprz !== p ? ` rysuj" style="--od:${(c * poprz) / 100}px` : "";
+  return `<svg class="ring" viewBox="0 0 76 76" aria-hidden="true"><circle cx="38" cy="38" r="${r}" class="ring-t"/><circle cx="38" cy="38" r="${r}" class="ring-v${rysuj}" stroke-dasharray="${(c * p) / 100} ${c}" transform="rotate(-90 38 38)"/></svg>`;
 }
 const naglowek = (tytul, wstecz, prawy = "") => `<header class="top">${wstecz ? `<a class="okr" href="${wstecz}" aria-label="Wstecz">${ikona("wstecz")}</a>` : ""}<h1>${tytul}</h1>${prawy}</header>`;
 
@@ -244,11 +236,11 @@ function ekranDom() {
   const d = new Date();
   let h = `<header class="top dom-top"><div><p class="powitanie">Dom, ${d.getDate()} ${["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września", "października", "listopada", "grudnia"][d.getMonth()]}</p><h1>Wykończenie</h1></div><span class="sync" id="sync" data-s="ok"></span></header>`;
   h += `<section class="hero">
-    <div class="hero-g"><div><p class="hero-l">Wydane</p><p class="hero-v">${kw(s.zapl)}</p><p class="hero-s">z ${zl(budzet)} ${wpisany ? "budżetu" : "w planach"}</p></div><div class="hero-r">${pierscien(proc)}<span class="${proc >= 100 ? "duzo" : ""}">${proc}%</span></div></div>
+    <div class="hero-g"><div><p class="hero-l">Wydane</p><p class="hero-v">${kwL("dom-wydane", s.zapl)}</p><p class="hero-s">z ${zl(budzet)} ${wpisany ? "budżetu" : "w planach"}</p></div><div class="hero-r">${pierscien(proc)}<span class="${proc >= 100 ? "duzo" : ""}">${proc}%</span></div></div>
   </section>
   <div class="duo">
-    <button class="mini mini-y" type="button" data-budzet>${wpisany ? `<p class="mini-l">Zostało pieniędzy</p><p class="mini-v ${pieniadze < 0 ? "zle" : ""}">${kw(pieniadze)}</p><p class="mini-s">budżet ${zl(wpisany)}</p>` : `<p class="mini-l">Ile masz pieniędzy?</p><p class="mini-v">Wpisz budżet</p><p class="mini-s">żeby porównać z planami</p>`}</button>
-    <div class="mini mini-w"><p class="mini-l">Zostało do wydania</p><p class="mini-v">${kw(s.zostalo)}</p><p class="mini-s ${brak > 0 ? "zle" : "ok"}">${brak > 0 ? `brakuje ${zl(brak)}` : `zapas ${zl(-brak)}`}</p></div>
+    <button class="mini mini-y" type="button" data-budzet>${wpisany ? `<p class="mini-l">Zostało pieniędzy</p><p class="mini-v ${pieniadze < 0 ? "zle" : ""}">${kwL("dom-pieniadze", pieniadze)}</p><p class="mini-s">budżet ${zl(wpisany)}</p>` : `<p class="mini-l">Ile masz pieniędzy?</p><p class="mini-v">Wpisz budżet</p><p class="mini-s">żeby porównać z planami</p>`}</button>
+    <div class="mini mini-w"><p class="mini-l">Zostało do wydania</p><p class="mini-v">${kwL("dom-zostalo", s.zostalo)}</p><p class="mini-s ${brak > 0 ? "zle" : "ok"}">${brak > 0 ? `brakuje ${zl(brak)}` : `zapas ${zl(-brak)}`}</p></div>
   </div>`;
   const uwagi = w.filter((x) => x.ponad || (x.bezPlanu && x.zapl));
   const pakPonad = [...S.pakiety.values()].filter((g) => g.ponad);
@@ -260,7 +252,7 @@ function ekranDom() {
   for (const x of w) { const k = pom().some((r) => r.id === x.p.pom) ? x.p.pom : ""; if (!grupy.has(k)) grupy.set(k, []); grupy.get(k).push(x); }
   const kafle = pom().map((r) => ({ r, s: suma(grupy.get(r.id) || []) }));
   h += `<div class="sekcja-h"><h2>Pomieszczenia</h2><a class="lnk" href="#ustawienia">Edytuj</a></div><div class="kafle">${kafle.map(({ r, s: g }) => `
-    <a class="kafel" href="#pom/${esc(r.id)}" style="--k:${kolorPom(r.id)}">
+    <a class="kafel" href="#pom/${esc(r.id)}" style="--k:${kolorPom(r.id)};view-transition-name:pom-${esc(r.id)}">
       <span class="kafel-t"><span class="okr-b">${ikonaPom(r.id)}</span><span class="kafel-n">${esc(r.nazwa)}</span></span>
       <span class="kafel-v">${kw(g.zostalo)}</span>
       <span class="kafel-s">${g.n ? `zostało z ${zl(g.plan)}` : "brak pozycji"}</span>
@@ -282,7 +274,7 @@ function ekranPom(id) {
   if (!r) return naglowek("Nie ma takiego pomieszczenia", "#dom");
   const xs = wykonczenie().filter((x) => x.p.pom === id), s = suma(xs);
   let h = naglowek(esc(r.nazwa), "#dom");
-  h += `<section class="hero" style="--k:${kolorPom(id)}"><div class="hero-g"><div><p class="hero-l">Zostało do wydania</p><p class="hero-v">${kw(s.zostalo)}</p><p class="hero-s">wydane ${zl(s.zapl)} z ${zl(s.plan)}</p></div><span class="okr-b duza">${ikonaPom(id)}</span></div>${pasek(s.zapl, s.zostalo, s.plan)}</section>`;
+  h += `<section class="hero" style="--k:${kolorPom(id)};view-transition-name:pom-${esc(id)}"><div class="hero-g"><div><p class="hero-l">Zostało do wydania</p><p class="hero-v">${kwL("pom-" + id, s.zostalo)}</p><p class="hero-s">wydane ${zl(s.zapl)} z ${zl(s.plan)}</p></div><span class="okr-b duza">${ikonaPom(id)}</span></div>${pasek(s.zapl, s.zostalo, s.plan)}</section>`;
   const luzne = xs.filter((x) => !x.wPakiecie);
   const pakiety = [...new Set(xs.filter((x) => x.wPakiecie).map((x) => x.wPakiecie.id))].map((pid) => S.pakiety.get(pid));
   h += `<div class="sekcja-h"><h2>Pozycje</h2><span class="szary">${xs.length}</span></div>`;
@@ -304,9 +296,9 @@ function ekranPoz(id) {
   const pl = platnosci().filter((q) => q.pozycja === id).sort((a, b) => (b.data || "").localeCompare(a.data || ""));
   const pr = p.produkty || [], kup = kupioneProdukty(), sumaPr = pr.reduce((a, q) => a + (q.cenaGr || 0), 0);
   let h = naglowek(esc(p.nazwa), wroc, `<button class="okr" type="button" data-edytuj-poz="${esc(id)}" aria-label="Edytuj pozycję">${ikona("olowek")}</button>`);
-  h += `<section class="hero" style="--k:${p.zakup ? "#E4E4EA" : kolorPom(p.pom)}">
+  h += `<section class="hero" style="--k:${p.zakup ? "#E4E4EA" : kolorPom(p.pom)};view-transition-name:poz-${esc(id)}">
     <p class="hero-meta">${[p.zakup ? "Zakup domu" : nazwaPom(p.pom), nazwaKat(p.kat)].filter(Boolean).map(esc).join(" · ")}</p>
-    <div class="trio"><div><p class="hero-l">Wydane</p><p class="trio-v">${kw(x.zapl)}</p></div><div><p class="hero-l">Plan</p><p class="trio-v">${x.plan ? kw(x.plan) : "—"}</p></div><div><p class="hero-l">Zostało</p><p class="trio-v">${kw(x.zostalo)}</p></div></div>
+    <div class="trio"><div><p class="hero-l">Wydane</p><p class="trio-v">${kwL("poz-w-" + id, x.zapl)}</p></div><div><p class="hero-l">Plan</p><p class="trio-v">${x.plan ? kwL("poz-p-" + id, x.plan) : "—"}</p></div><div><p class="hero-l">Zostało</p><p class="trio-v">${kwL("poz-z-" + id, x.zostalo)}</p></div></div>
     ${pasek(x.zapl, x.zostalo, x.plan)}
     ${stanPozycji(x) ? `<p class="hero-tag">${stanPozycji(x)}</p>` : ""}
     ${x.wPakiecie ? (() => { const g = S.pakiety.get(x.wPakiecie.id); return `<p class="hero-s">Pakiet „${esc(g.pk.nazwa)}”: wydane ${zl(g.zapl)} z ${zl(g.plan)}, zostało ${zl(g.zostalo)}.</p>`; })() : ""}
@@ -320,7 +312,7 @@ function ekranPoz(id) {
     h += `<div class="karta">${pr.map((q) => `<div class="prod">
         <button class="prod-g" type="button" data-prod="${esc(id)}|${esc(q.id)}"><span class="prod-n">${esc(q.nazwa)}</span><span class="prod-m">${esc([q.model, q.sklep].filter(Boolean).join(", "))}</span></button>
         <span class="prod-c">${kw(q.cenaGr)}</span>
-        <span class="prod-a">${q.link ? `<a class="chip" href="${esc(q.link)}" target="_blank" rel="noopener">Sklep ${ikona("strzalka", 16)}</a>` : ""}${kup.has(q.id) ? `<span class="tag ok">kupione</span>` : `<button class="chip chip-czarny" type="button" data-kup="${esc(id)}|${esc(q.id)}">Kupiłem</button>`}</span>
+        <span class="prod-a">${q.link ? `<a class="chip" href="${esc(q.link)}" target="_blank" rel="noopener">Sklep ${ikona("strzalka", 16)}</a>` : ""}${kup.has(q.id) ? `<span class="tag ok${S.swieze?.has(q.id) ? " pop" : ""}">kupione</span>` : `<button class="chip chip-czarny" type="button" data-kup="${esc(id)}|${esc(q.id)}">Kupiłem</button>`}</span>
       </div>`).join("")}<p class="przyp">Razem ${zl(sumaPr)}${x.plan ? (sumaPr > x.plan ? `, o ${zl(sumaPr - x.plan)} więcej niż plan` : sumaPr === x.plan ? ", tyle co plan" : `, ${zl(x.plan - sumaPr)} poniżej planu`) : ""}.</p></div>`;
   } else h += `<p class="pusto">Dodaj konkretne modele z cenami, żeby widzieć, czy mieszczą się w planie.</p>`;
   return h;
@@ -398,6 +390,7 @@ function ekranUstawienia() {
 
 /* ---------- arkusze (formularze od dołu) ---------- */
 function pokazArkusz(html, fokus) {
+  if (S.zamykanie) { clearTimeout(S.zamykanie); S.zamykanie = null; $("#zaslona").classList.remove("zamyka"); }
   if (!S.przedArkuszem) S.przedArkuszem = document.activeElement;
   $("#arkusz").innerHTML = `<div class="uchwyt" aria-hidden="true"></div>${html}`;
   const tytul = $("#arkusz h2"); if (tytul) { tytul.id = "ark-tytul"; $("#arkusz").setAttribute("aria-labelledby", "ark-tytul"); }
@@ -408,9 +401,15 @@ function pokazArkusz(html, fokus) {
 function ukryjArkusz() {
   const e = S.sheet;
   if (e?.typ === "pl" && e.nowe?.length && !e.zapisano) for (const p of e.nowe) usunPlik(p);
-  S.sheet = null; $("#zaslona").hidden = true; $("#arkusz").innerHTML = ""; document.body.classList.remove("blok");
-  const wroc = S.przedArkuszem; S.przedArkuszem = null;
-  if (wroc && document.contains(wroc)) wroc.focus({ preventScroll: true });
+  S.sheet = null;
+  const z = $("#zaslona"), wroc = S.przedArkuszem; S.przedArkuszem = null;
+  const koniec = () => {
+    S.zamykanie = null; z.classList.remove("zamyka");
+    if (S.sheet) return;
+    z.hidden = true; $("#arkusz").innerHTML = ""; document.body.classList.remove("blok");
+    if (wroc && document.contains(wroc)) wroc.focus({ preventScroll: true });
+  };
+  if (bezRuchu()) koniec(); else { z.classList.add("zamyka"); S.zamykanie = setTimeout(koniec, 180); }
 }
 function zamknijArkusz() { ukryjArkusz(); if (history.state?.ov) { S.cichyPop = true; history.back(); } }
 const chipyWyboru = (nazwa, lista, wybrany, kolory) => `<div class="chipy" role="radiogroup">${lista.map((x) => `<button class="chip ${x.id === wybrany ? "on" : ""}" type="button" role="radio" aria-checked="${x.id === wybrany}" data-wybor="${nazwa}" data-v="${esc(x.id)}">${kolory ? `<span class="kropka" style="background:${kolorPom(x.id)}"></span>` : ""}${esc(x.nazwa)}</button>`).join("")}</div>`;
@@ -625,7 +624,12 @@ async function zapiszBudzet(wyczysc) {
 
 /* ---------- komunikaty ---------- */
 let toastT;
-function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3500); }
+function toast(msg) {
+  const t = $("#toast"), ok = /^(Dodano|Zapisano|Usunięto|Budżet)/.test(msg);
+  t.classList.toggle("ok", ok); t.textContent = msg;
+  t.hidden = true; void t.offsetWidth; t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3200);
+}
 function sync(s) { S.sync = s; const e = $("#sync"); if (e) e.dataset.s = s; }
 function bladZapisu(e) {
   const c = e?.code; sync("err");
@@ -676,6 +680,7 @@ function render() {
   S.ostatniKlucz = klucz;
   el.innerHTML = e.typ === "pom" ? ekranPom(e.id) : e.typ === "poz" ? ekranPoz(e.id) : e.typ === "lista" ? ekranLista() : e.typ === "platnosci" ? ekranPlatnosci() : e.typ === "ustawienia" ? ekranUstawienia() : ekranDom();
   if (e.typ === "lista" || e.typ === "platnosci") odswiezWyniki();
+  animujLiczby();
   sync(S.sync || "ok");
   if (przewin) window.scrollTo(0, 0);
 }
@@ -695,7 +700,14 @@ async function odswiez() {
 
 /* ---------- zdarzenia ---------- */
 function wire() {
-  window.addEventListener("hashchange", render);
+  window.addEventListener("hashchange", () => {
+    if (!document.startViewTransition || bezRuchu() || S.sheet || !S.gotowe) return render();
+    /* Przejście bywa pomijane (szybkie podwójne stuknięcie, obrót telefonu). Ekran i tak się zmienia,
+       przepada tylko animacja, więc odrzucenia obietnic przejścia są tu oczekiwane. */
+    const vt = document.startViewTransition(() => render());
+    vt.ready.catch(() => {}); vt.finished.catch(() => {});
+    vt.updateCallbackDone.catch((e) => (window.reportError ? reportError(e) : console.error(e)));
+  });
   window.addEventListener("popstate", () => { if (S.cichyPop) { S.cichyPop = false; return; } if (S.sheet) ukryjArkusz(); });
   document.addEventListener("click", (ev) => {
     const t = ev.target;
