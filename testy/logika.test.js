@@ -1,4 +1,4 @@
-// Testy obliczeń aplikacji. Uruchom: node --test testy/
+// Testy obliczeń aplikacji. Uruchom: node --test testy/*.test.js
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const L = require("../logika.js");
@@ -101,4 +101,12 @@ test("nazwaPrzejscia daje poprawny identyfikator CSS z dowolnego id", () => {
 });
 test("nazwaPrzejscia rozróżnia różne id", () => {
   assert.notEqual(L.nazwaPrzejscia("poz", "a b"), L.nazwaPrzejscia("poz", "a_b"));
+});
+
+test("bezpiecznyLink przepuszcza tylko adresy http i https", () => {
+  assert.equal(L.bezpiecznyLink("https://www.euro.com.pl/x"), "https://www.euro.com.pl/x");
+  assert.equal(L.bezpiecznyLink("javascript:alert(1)"), null);
+  assert.equal(L.bezpiecznyLink(" JavaScript:alert(1)"), null);
+  assert.equal(L.bezpiecznyLink("data:text/html,x"), null);
+  assert.equal(L.bezpiecznyLink(""), null);
 });

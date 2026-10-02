@@ -68,7 +68,12 @@
     return prefiks + "-" + String(id).replace(/[^A-Za-z0-9-]/g, (c) => "_" + c.codePointAt(0).toString(16) + "_");
   }
 
-  const api = { parseKwota, policz, suma, wartoscLicznika, noweKupione, bezpiecznyKolor, nazwaPrzejscia };
+  /* Link do sklepu z bazy: tylko http(s), żeby javascript: ani data: nie trafiły do href. */
+  function bezpiecznyLink(u) {
+    return typeof u === "string" && /^https?:\/\//i.test(u) ? u : null;
+  }
+
+  const api = { parseKwota, policz, suma, wartoscLicznika, noweKupione, bezpiecznyKolor, nazwaPrzejscia, bezpiecznyLink };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Logika = api;
 })(typeof window !== "undefined" ? window : this);

@@ -96,7 +96,7 @@ const S = {
 };
 function ustawDane(d) {
   const swieze = Logika.noweKupione(S.dane?.platnosci, d.platnosci || []);
-  if (swieze.size) { S.swieze = swieze; setTimeout(() => { S.swieze = new Set(); }, 1500); }
+  if (swieze.size) { S.swieze = swieze; clearTimeout(S.swiezeT); S.swiezeT = setTimeout(() => { S.swieze = new Set(); }, 1500); }
   S.dane = d; S.gotowe = true; S.calc = null; render();
 }
 const pom = () => S.dane?.ustawienia.pomieszczenia || [];
@@ -125,7 +125,7 @@ const kupioneProdukty = () => new Set(platnosci().filter((q) => q.produkt).map((
 
 /* ---------- kolory i ikony pomieszczeń ---------- */
 const PASTELE = ["#F8DA6B", "#F6B9D6", "#C8C4F4", "#AEE3D6", "#FBD2AE", "#BCD5F3", "#CFDC9E", "#F6A193", "#E3C5F0", "#EBDCC3"];
-const kolorPom = (id) => { const r = pom().find((p) => p.id === id); const k = Logika.bezpiecznyKolor(r?.kolor); if (k) return k; const i = pom().findIndex((p) => p.id === id); return i < 0 ? "#E4E4EA" : PASTELE[i % PASTELE.length]; };
+const kolorPom = (id) => { const r = pom().find((p) => p.id === id); const k = Logika.bezpiecznyKolor(r?.kolor); if (k) return k; const i = pom().findIndex((p) => p.id === id); return i < 0 ? "var(--neutralny)" : PASTELE[i % PASTELE.length]; };
 const IKONY = {
   dom: "M3.5 10.5 12 4l8.5 6.5V20a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z",
   lista: "M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01",
@@ -172,7 +172,7 @@ function animujLiczby() {
     const k = el.dataset.licz, od = +el.dataset.od, doGr = +el.dataset.do;
     S.liczby[k] = doGr;
     if (od === doGr || bezRuchu()) { el.textContent = f0.format(Math.round(doGr / 100)); continue; }
-    const start = performance.now(), czas = 900;
+    const start = performance.now(), czas = czasRuchu("--ruch-wolny") || 900;
     const krok = (t) => {
       const v = Logika.wartoscLicznika(od / 100, doGr / 100, (t - start) / czas);
       el.textContent = f0.format(v);
@@ -195,7 +195,7 @@ function stanPozycji(x) {
   return "";
 }
 function kolkoPozycji(x) {
-  const tlo = x.p.zakup ? "#E4E4EA" : kolorPom(x.p.pom);
+  const tlo = x.p.zakup ? "var(--neutralny)" : kolorPom(x.p.pom);
   const zle = !x.wPakiecie && (x.ponad || (x.bezPlanu && x.zapl));
   const pelne = x.plan && x.zapl >= x.plan;
   if (x.p.zakonczona || pelne) return `<span class="kolko kolko-pelne" style="--k:${tlo}">${ikona("ok", 22)}</span>`;
@@ -207,7 +207,7 @@ function kolkoPozycji(x) {
 function wierszPozycji(x, gdzie) {
   const kat = nazwaKat(x.p.kat), pod = [gdzie ? (x.p.zakup ? "Zakup domu" : nazwaPom(x.p.pom)) : "", kat && kat !== x.p.nazwa ? kat : "", x.p.produkty?.length ? `${x.p.produkty.length} prod.` : ""].filter(Boolean);
   const plan = x.p.zakonczona ? "zakończone" : x.ponad ? `ponad plan o ${zl(x.zapl - x.plan)}` : x.plan ? `z ${zl(x.plan)}` : x.wPakiecie ? "z budżetu pakietu" : "bez planu";
-  return `<a class="poz" href="#poz/${esc(x.p.id)}" style="view-transition-name:${Logika.nazwaPrzejscia("poz", x.p.id)}">
+  return `<a class="poz" href="#poz/${esc(encodeURIComponent(x.p.id))}">
     ${kolkoPozycji(x)}
     <span class="poz-t"><span class="poz-n">${esc(x.p.nazwa)}</span>${pod.length ? `<span class="poz-m">${pod.map(esc).join(", ")}</span>` : ""}</span>
     <span class="poz-c"><span class="poz-v">${kw(x.zapl)}</span><span class="poz-p ${x.ponad && !x.wPakiecie ? "zle" : ""}">${plan}</span></span>
@@ -252,7 +252,7 @@ function ekranDom() {
   for (const x of w) { const k = pom().some((r) => r.id === x.p.pom) ? x.p.pom : ""; if (!grupy.has(k)) grupy.set(k, []); grupy.get(k).push(x); }
   const kafle = pom().map((r) => ({ r, s: suma(grupy.get(r.id) || []) }));
   h += `<div class="sekcja-h"><h2>Pomieszczenia</h2><a class="lnk" href="#ustawienia">Edytuj</a></div><div class="kafle">${kafle.map(({ r, s: g }) => `
-    <a class="kafel" href="#pom/${esc(r.id)}" style="--k:${kolorPom(r.id)};view-transition-name:${Logika.nazwaPrzejscia("pom", r.id)}">
+    <a class="kafel" href="#pom/${esc(encodeURIComponent(r.id))}" style="--k:${kolorPom(r.id)}">
       <span class="kafel-t"><span class="okr-b">${ikonaPom(r.id)}</span><span class="kafel-n">${esc(r.nazwa)}</span></span>
       <span class="kafel-v">${kw(g.zostalo)}</span>
       <span class="kafel-s">${g.n ? `zostało z ${zl(g.plan)}` : "brak pozycji"}</span>
@@ -264,7 +264,7 @@ function ekranDom() {
   const wyk = new Map();
   for (const pl of platnosci()) if (pl.gdzie && !poz(pl.pozycja)?.zakup) wyk.set(pl.gdzie, (wyk.get(pl.gdzie) || 0) + (pl.kwotaGr || 0));
   if (wyk.size) h += `<div class="sekcja-h"><h2>Komu płacisz</h2><a class="lnk" href="#platnosci">Wszystkie</a></div><div class="karta lista-p">${[...wyk.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([g, k]) => `<a class="wk" href="#platnosci/${encodeURIComponent(g)}"><span>${esc(g)}</span><span class="num">${kw(k)}</span></a>`).join("")}</div>`;
-  if (sz.n) h += `<div class="sekcja-h"><h2>Zakup domu</h2></div><div class="karta lista-p">${zakup().map((x) => `<a class="wk" href="#poz/${esc(x.p.id)}"><span>${esc(x.p.nazwa)}</span><span class="num">${kw(x.zapl)}</span></a>`).join("")}<p class="przyp">Razem ${zl(sz.zapl)}. Nie liczy się do wykończenia.</p></div>`;
+  if (sz.n) h += `<div class="sekcja-h"><h2>Zakup domu</h2></div><div class="karta lista-p">${zakup().map((x) => `<a class="wk" href="#poz/${esc(encodeURIComponent(x.p.id))}"><span>${esc(x.p.nazwa)}</span><span class="num">${kw(x.zapl)}</span></a>`).join("")}<p class="przyp">Razem ${zl(sz.zapl)}. Nie liczy się do wykończenia.</p></div>`;
   return h;
 }
 
@@ -296,7 +296,7 @@ function ekranPoz(id) {
   const pl = platnosci().filter((q) => q.pozycja === id).sort((a, b) => (b.data || "").localeCompare(a.data || ""));
   const pr = p.produkty || [], kup = kupioneProdukty(), sumaPr = pr.reduce((a, q) => a + (q.cenaGr || 0), 0);
   let h = naglowek(esc(p.nazwa), wroc, `<button class="okr" type="button" data-edytuj-poz="${esc(id)}" aria-label="Edytuj pozycję">${ikona("olowek")}</button>`);
-  h += `<section class="hero" style="--k:${p.zakup ? "#E4E4EA" : kolorPom(p.pom)};view-transition-name:${Logika.nazwaPrzejscia("poz", id)}">
+  h += `<section class="hero" style="--k:${p.zakup ? "var(--neutralny)" : kolorPom(p.pom)};view-transition-name:${Logika.nazwaPrzejscia("poz", id)}">
     <p class="hero-meta">${[p.zakup ? "Zakup domu" : nazwaPom(p.pom), nazwaKat(p.kat)].filter(Boolean).map(esc).join(" · ")}</p>
     <div class="trio"><div><p class="hero-l">Wydane</p><p class="trio-v">${kwL("poz-w-" + id, x.zapl)}</p></div><div><p class="hero-l">Plan</p><p class="trio-v">${x.plan ? kwL("poz-p-" + id, x.plan) : "—"}</p></div><div><p class="hero-l">Zostało</p><p class="trio-v">${kwL("poz-z-" + id, x.zostalo)}</p></div></div>
     ${pasek(x.zapl, x.zostalo, x.plan)}
@@ -312,7 +312,7 @@ function ekranPoz(id) {
     h += `<div class="karta">${pr.map((q) => `<div class="prod">
         <button class="prod-g" type="button" data-prod="${esc(id)}|${esc(q.id)}"><span class="prod-n">${esc(q.nazwa)}</span><span class="prod-m">${esc([q.model, q.sklep].filter(Boolean).join(", "))}</span></button>
         <span class="prod-c">${kw(q.cenaGr)}</span>
-        <span class="prod-a">${q.link ? `<a class="chip" href="${esc(q.link)}" target="_blank" rel="noopener">Sklep ${ikona("strzalka", 16)}</a>` : ""}${kup.has(q.id) ? `<span class="tag ok${S.swieze?.has(q.id) ? " pop" : ""}">kupione</span>` : `<button class="chip chip-czarny" type="button" data-kup="${esc(id)}|${esc(q.id)}">Kupiłem</button>`}</span>
+        <span class="prod-a">${Logika.bezpiecznyLink(q.link) ? `<a class="chip" href="${esc(Logika.bezpiecznyLink(q.link))}" target="_blank" rel="noopener">Sklep ${ikona("strzalka", 16)}</a>` : ""}${kup.has(q.id) ? `<span class="tag ok${S.swieze?.delete(q.id) ? " pop" : ""}">kupione</span>` : `<button class="chip chip-czarny" type="button" data-kup="${esc(id)}|${esc(q.id)}">Kupiłem</button>`}</span>
       </div>`).join("")}<p class="przyp">Razem ${zl(sumaPr)}${x.plan ? (sumaPr > x.plan ? `, o ${zl(sumaPr - x.plan)} więcej niż plan` : sumaPr === x.plan ? ", tyle co plan" : `, ${zl(x.plan - sumaPr)} poniżej planu`) : ""}.</p></div>`;
   } else h += `<p class="pusto">Dodaj konkretne modele z cenami, żeby widzieć, czy mieszczą się w planie.</p>`;
   return h;
@@ -389,9 +389,17 @@ function ekranUstawienia() {
 }
 
 /* ---------- arkusze (formularze od dołu) ---------- */
+/* Jedna akcja zapisu naraz: drugie stuknięcie w trakcie zapisu albo zamykania okienka nic nie robi. */
+async function raz(fn) {
+  if (S.zapisuje || !S.sheet) return;
+  S.zapisuje = true;
+  try { await fn(); } finally { S.zapisuje = false; }
+}
+const czasRuchu = (token) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(token)) || 0;
 function pokazArkusz(html, fokus) {
   if (S.zamykanie) { clearTimeout(S.zamykanie); S.zamykanie = null; $("#zaslona").classList.remove("zamyka"); }
-  if (!S.przedArkuszem) S.przedArkuszem = document.activeElement;
+  $("#zaslona").inert = false;
+  if (!S.przedArkuszem && !$("#arkusz").contains(document.activeElement)) S.przedArkuszem = document.activeElement;
   $("#arkusz").innerHTML = `<div class="uchwyt" aria-hidden="true"></div>${html}`;
   const tytul = $("#arkusz h2"); if (tytul) { tytul.id = "ark-tytul"; $("#arkusz").setAttribute("aria-labelledby", "ark-tytul"); }
   $("#zaslona").hidden = false; document.body.classList.add("blok");
@@ -402,14 +410,16 @@ function ukryjArkusz() {
   const e = S.sheet;
   if (e?.typ === "pl" && e.nowe?.length && !e.zapisano) for (const p of e.nowe) usunPlik(p);
   S.sheet = null;
-  const z = $("#zaslona"), wroc = S.przedArkuszem; S.przedArkuszem = null;
+  const z = $("#zaslona");
+  z.inert = true;
   const koniec = () => {
-    S.zamykanie = null; z.classList.remove("zamyka");
+    S.zamykanie = null; z.classList.remove("zamyka"); z.inert = false;
     if (S.sheet) return;
     z.hidden = true; $("#arkusz").innerHTML = ""; document.body.classList.remove("blok");
+    const wroc = S.przedArkuszem; S.przedArkuszem = null;
     if (wroc && document.contains(wroc)) wroc.focus({ preventScroll: true });
   };
-  if (bezRuchu()) koniec(); else { z.classList.add("zamyka"); S.zamykanie = setTimeout(koniec, 180); }
+  if (bezRuchu()) koniec(); else { z.classList.add("zamyka"); S.zamykanie = setTimeout(koniec, czasRuchu("--ruch-szybki")); }
 }
 function zamknijArkusz() { ukryjArkusz(); if (history.state?.ov) { S.cichyPop = true; history.back(); } }
 const chipyWyboru = (nazwa, lista, wybrany, kolory) => `<div class="chipy" role="radiogroup">${lista.map((x) => `<button class="chip ${x.id === wybrany ? "on" : ""}" type="button" role="radio" aria-checked="${x.id === wybrany}" data-wybor="${nazwa}" data-v="${esc(x.id)}">${kolory ? `<span class="kropka" style="background:${kolorPom(x.id)}"></span>` : ""}${esc(x.nazwa)}</button>`).join("")}</div>`;
@@ -437,7 +447,7 @@ async function zapiszNowaPozycje(kolejna) {
   try {
     await zmien(`Nowa pozycja: ${nazwa} (${nazwaPom(pomId)})`, (d) => { d.pozycje.push({ id, nazwa, pom: pomId, kat: katId, planGr: plan || 0, zakonczona: false, zakup: false, notatka: "" }); });
     S.ostatnie = { ...S.ostatnie, pom: pomId, kat: katId };
-    toast(`Dodano: ${nazwa}`);
+    toast(`Dodano: ${nazwa}`, true);
     if (kolejna) { $("#np-nazwa").value = ""; $("#np-plan").value = ""; $("#np-nazwa").focus(); }
     else zamknijArkusz();
   } catch (e) { bladZapisu(e); }
@@ -525,7 +535,7 @@ async function zapiszPlatnosc() {
     });
     e.zapisano = true;
     for (const p of usuniete) usunPlik(p);
-    toast(`${e.id ? "Zapisano płatność" : "Dodano płatność"}: ${poz(pozId)?.nazwa || ""}, ${zl2(kwG)}`);
+    toast(`${e.id ? "Zapisano płatność" : "Dodano płatność"}: ${poz(pozId)?.nazwa || ""}, ${zl2(kwG)}`, true);
     zamknijArkusz();
   } catch (err) { bladZapisu(err); $("#pl-zapisz").disabled = false; }
 }
@@ -535,7 +545,7 @@ async function usunPlatnosc() {
   try {
     await zmien(`Usunięto płatność: ${poz(pl?.pozycja)?.nazwa || ""}, ${zl2(pl?.kwotaGr)}`, (d) => { d.platnosci = d.platnosci.filter((q) => q.id !== e.id); });
     for (const p of pl?.pliki || []) usunPlik(p.id);
-    e.zapisano = true; toast("Usunięto płatność."); zamknijArkusz();
+    e.zapisano = true; toast("Usunięto płatność.", true); zamknijArkusz();
   } catch (err) { bladZapisu(err); }
 }
 
@@ -561,7 +571,7 @@ async function zapiszEdycjePozycji() {
   const blad = !nazwa ? "Wpisz nazwę." : plan === null || plan < 0 ? "Plan wpisz liczbą." : "";
   if (blad) { const e = $("#ep-blad"); e.textContent = blad; e.hidden = false; return; }
   const dane = { nazwa, planGr: plan || 0, pom: $("#ep-pom").value, kat: $("#ep-kat").value, pakiet: $("#ep-pak")?.value || "", zakonczona: $("#ep-zak").checked, zakup: $("#ep-zakup").checked, notatka: $("#ep-notatka").value.trim() };
-  try { await zmien(`Pozycja: ${nazwa}`, (d) => { const p = d.pozycje.find((q) => q.id === id); if (p) Object.assign(p, dane); }); toast("Zapisano."); zamknijArkusz(); }
+  try { await zmien(`Pozycja: ${nazwa}`, (d) => { const p = d.pozycje.find((q) => q.id === id); if (p) Object.assign(p, dane); }); toast("Zapisano.", true); zamknijArkusz(); }
   catch (e) { bladZapisu(e); }
 }
 async function usunPozycje() {
@@ -569,7 +579,7 @@ async function usunPozycje() {
   if (n) { const e = $("#ep-blad"); e.textContent = `Ta pozycja ma ${n} płatności. Najpierw je usuń albo przenieś do innej pozycji.`; e.hidden = false; return; }
   if (!b.dataset.pewne) { b.dataset.pewne = "1"; b.textContent = "Tak, usuń"; return; }
   const p = poz(id);
-  try { await zmien(`Usunięto pozycję: ${p?.nazwa}`, (d) => { d.pozycje = d.pozycje.filter((q) => q.id !== id); }); zamknijArkusz(); location.hash = p?.zakup ? "#dom" : `#pom/${encodeURIComponent(p?.pom ?? "")}`; toast("Usunięto pozycję."); }
+  try { await zmien(`Usunięto pozycję: ${p?.nazwa}`, (d) => { d.pozycje = d.pozycje.filter((q) => q.id !== id); }); zamknijArkusz(); location.hash = p?.zakup ? "#dom" : `#pom/${encodeURIComponent(p?.pom ?? "")}`; toast("Usunięto pozycję.", true); }
   catch (e) { bladZapisu(e); }
 }
 
@@ -595,7 +605,7 @@ async function zapiszProdukt() {
   const dane = { id, nazwa, model: $("#pr-model").value.trim(), cenaGr: cena, sklep: $("#pr-sklep").value.trim(), link, notatka: $("#pr-notatka").value.trim() };
   try {
     await zmien(`Produkt: ${nazwa}, ${zl2(cena)}`, (d) => { const p = d.pozycje.find((q) => q.id === e.pozId); if (!p) return; p.produkty ??= []; const i = p.produkty.findIndex((q) => q.id === id); if (i >= 0) p.produkty[i] = dane; else p.produkty.push(dane); });
-    toast(`Zapisano: ${nazwa}`); zamknijArkusz();
+    toast(`Zapisano: ${nazwa}`, true); zamknijArkusz();
   } catch (err) { bladZapisu(err); }
 }
 async function usunProdukt() {
@@ -618,14 +628,14 @@ function arkuszBudzetu() {
 async function zapiszBudzet(wyczysc) {
   const t = wyczysc ? "" : $("#b-kwota").value.trim(), v = t ? parseKwota(t) : 0;
   if (v === null || v < 0) { toast("Wpisz kwotę liczbą, np. 400000."); return; }
-  try { await zmien(v ? `Budżet wykończenia: ${zl(v)}` : "Usunięto kwotę budżetu", (d) => { if (v) d.ustawienia.budzetGr = v; else delete d.ustawienia.budzetGr; }); toast(v ? `Budżet: ${zl(v)}` : "Budżet liczony z planów."); zamknijArkusz(); }
+  try { await zmien(v ? `Budżet wykończenia: ${zl(v)}` : "Usunięto kwotę budżetu", (d) => { if (v) d.ustawienia.budzetGr = v; else delete d.ustawienia.budzetGr; }); toast(v ? `Budżet: ${zl(v)}` : "Budżet liczony z planów.", true); zamknijArkusz(); }
   catch (e) { bladZapisu(e); }
 }
 
 /* ---------- komunikaty ---------- */
 let toastT;
-function toast(msg) {
-  const t = $("#toast"), ok = /^(Dodano|Zapisano|Usunięto|Budżet)/.test(msg);
+function toast(msg, ok = false) {
+  const t = $("#toast");
   t.classList.toggle("ok", ok); t.textContent = msg;
   t.hidden = true; void t.offsetWidth; t.hidden = false;
   clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 3200);
@@ -658,7 +668,8 @@ function csvPlatnosci() {
 
 /* ---------- nawigacja ---------- */
 function trasa() {
-  const h = decodeURIComponent(location.hash.slice(1));
+  let h = location.hash.slice(1);
+  try { h = decodeURIComponent(h); } catch { /* zostaw surowy adres */ }
   const [typ, ...reszta] = h.split("/"); const arg = reszta.join("/");
   if (typ === "pom" && arg) return { typ: "pom", id: arg };
   if (typ === "poz" && arg) return { typ: "poz", id: arg };
@@ -702,9 +713,19 @@ async function odswiez() {
 function wire() {
   window.addEventListener("hashchange", () => {
     if (!document.startViewTransition || bezRuchu() || S.sheet || !S.gotowe) return render();
+    /* Nazwę przejścia ma stale tylko karta główna. Kafel albo wiersz, który prowadzi do nowego ekranu
+       (albo z którego przyszliśmy), dostaje ją na chwilę, żeby nie robić zrzutu każdego wiersza listy. */
+    const nazwa = (e) => (e.typ === "pom" || e.typ === "poz") ? Logika.nazwaPrzejscia(e.typ, e.id) : null;
+    const link = (e) => [...document.querySelectorAll("#ekran a.kafel[href], #ekran a.poz[href]")].find((a) => a.getAttribute("href") === `#${e.typ}/${encodeURIComponent(e.id)}`);
+    const stara = S.ekran, nowa = trasa();
+    const doNowej = nazwa(nowa) && link(nowa); if (doNowej) doNowej.style.viewTransitionName = nazwa(nowa);
     /* Przejście bywa pomijane (szybkie podwójne stuknięcie, obrót telefonu). Ekran i tak się zmienia,
        przepada tylko animacja, więc odrzucenia obietnic przejścia są tu oczekiwane. */
-    const vt = document.startViewTransition(() => render());
+    const vt = document.startViewTransition(() => {
+      render();
+      const zStarej = nazwa(stara) && !document.querySelector(".hero[style*='view-transition-name']")?.style.viewTransitionName.includes(nazwa(stara)) && link(stara);
+      if (zStarej) zStarej.style.viewTransitionName = nazwa(stara);
+    });
     vt.ready.catch(() => {}); vt.finished.catch(() => {});
     vt.updateCallbackDone.catch((e) => (window.reportError ? reportError(e) : console.error(e)));
   });
@@ -729,11 +750,11 @@ function wire() {
     const pdf = t.closest("[data-pdf]"); if (pdf) { const okno = window.open("", "_blank"); blobUrl(pdf.dataset.pdf).then((u) => { if (okno) okno.location.href = u; else location.href = u; }, () => { okno?.close(); toast("Nie udało się otworzyć pliku."); }); return; }
     const rm = t.closest("[data-rm]"); if (rm && S.sheet?.typ === "pl") { S.sheet.pliki.splice(+rm.dataset.rm, 1); renderPliki(); return; }
     if (t.closest("#pl-dodaj-plik")) { $("#pl-plik").click(); return; }
-    if (t.id === "np-kolejna") { zapiszNowaPozycje(true); return; }
-    if (t.id === "pl-usun") { usunPlatnosc(); return; }
-    if (t.id === "ep-usun") { usunPozycje(); return; }
-    if (t.id === "pr-usun") { usunProdukt(); return; }
-    if (t.id === "b-wyczysc") { zapiszBudzet(true); return; }
+    if (t.id === "np-kolejna") { raz(() => zapiszNowaPozycje(true)); return; }
+    if (t.id === "pl-usun") { raz(usunPlatnosc); return; }
+    if (t.id === "ep-usun") { raz(usunPozycje); return; }
+    if (t.id === "pr-usun") { raz(usunProdukt); return; }
+    if (t.id === "b-wyczysc") { raz(() => zapiszBudzet(true)); return; }
     const kol = t.closest("[data-kolor]"); if (kol) { const id = kol.dataset.kolor, i = PASTELE.indexOf(kolorPom(id)), nowy = PASTELE[(i + 1) % PASTELE.length]; kol.style.background = nowy; zmien("Kolor pomieszczenia", (d) => { const r = d.ustawienia.pomieszczenia.find((q) => q.id === id); if (r) r.kolor = nowy; }).catch(bladZapisu); return; }
     const ud = t.closest("[data-u-del]"); if (ud) { S.usuwanie = { typ: ud.dataset.uDel, id: ud.dataset.id }; S.ostatniKlucz = ""; render(); return; }
     if (t.closest("[data-del-no]")) { S.usuwanie = null; S.ostatniKlucz = ""; render(); return; }
@@ -753,11 +774,11 @@ function wire() {
   });
   document.addEventListener("submit", (ev) => {
     const f = ev.target; ev.preventDefault();
-    if (f.id === "f-nowa-poz") return zapiszNowaPozycje(false);
-    if (f.id === "f-pl") return zapiszPlatnosc();
-    if (f.id === "f-poz") return zapiszEdycjePozycji();
-    if (f.id === "f-prod") return zapiszProdukt();
-    if (f.id === "f-budzet") return zapiszBudzet(false);
+    if (f.id === "f-nowa-poz") return raz(() => zapiszNowaPozycje(false));
+    if (f.id === "f-pl") return raz(zapiszPlatnosc);
+    if (f.id === "f-poz") return raz(zapiszEdycjePozycji);
+    if (f.id === "f-prod") return raz(zapiszProdukt);
+    if (f.id === "f-budzet") return raz(() => zapiszBudzet(false));
     const typ = f.dataset.dodaj;
     if (typ) {
       const inp = f.querySelector("input"), n = inp.value.trim(); if (!n) return;

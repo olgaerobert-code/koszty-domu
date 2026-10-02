@@ -251,6 +251,7 @@ textarea.pole { resize: vertical; }
 .plik-x { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: 0; background: var(--czern); color: #fff; display: grid; place-items: center; padding: 0; cursor: pointer; }
 
 /* arkusz od dołu */
+#zaslona.zamyka { pointer-events: none; }
 #zaslona { position: fixed; inset: 0; z-index: 40; background: var(--zaslona); display: flex; align-items: flex-end; justify-content: center; }
 #arkusz { width: 100%; max-width: 520px; max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; background: var(--karta); border-radius: var(--r-duzy) var(--r-duzy) 0 0; padding: 8px 20px calc(env(safe-area-inset-bottom, 0px) + 20px); }
 .uchwyt { width: 44px; height: 5px; border-radius: 99px; background: var(--linia); margin: 4px auto 10px; }
@@ -309,7 +310,7 @@ textarea.pole { resize: vertical; }
 
 <div id="zaslona" hidden><div id="arkusz" role="dialog" aria-modal="true"></div></div>
 <div id="toast" role="status" hidden></div>
-<script src="logika.js?v=2"></script>
-<script src="app.js?v=13"></script>
+<script src="logika.js?v=3"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>
