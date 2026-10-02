@@ -125,7 +125,7 @@ const kupioneProdukty = () => new Set(platnosci().filter((q) => q.produkt).map((
 
 /* ---------- kolory i ikony pomieszczeń ---------- */
 const PASTELE = ["#F8DA6B", "#F6B9D6", "#C8C4F4", "#AEE3D6", "#FBD2AE", "#BCD5F3", "#CFDC9E", "#F6A193", "#E3C5F0", "#EBDCC3"];
-const kolorPom = (id) => { const r = pom().find((p) => p.id === id); if (r?.kolor) return r.kolor; const i = pom().findIndex((p) => p.id === id); return i < 0 ? "#E4E4EA" : PASTELE[i % PASTELE.length]; };
+const kolorPom = (id) => { const r = pom().find((p) => p.id === id); const k = Logika.bezpiecznyKolor(r?.kolor); if (k) return k; const i = pom().findIndex((p) => p.id === id); return i < 0 ? "#E4E4EA" : PASTELE[i % PASTELE.length]; };
 const IKONY = {
   dom: "M3.5 10.5 12 4l8.5 6.5V20a1 1 0 0 1-1 1H15v-6H9v6H4.5a1 1 0 0 1-1-1z",
   lista: "M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01",
@@ -165,7 +165,7 @@ const bezRuchu = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 function kwL(klucz, gr) {
   const doGr = Math.round(gr || 0), znane = S.liczby[klucz];
   const od = znane ?? (S.pierwszyDom && klucz.startsWith("dom-") ? 0 : doGr);
-  return `<span data-licz="${klucz}" data-od="${od}" data-do="${doGr}">${f0.format(Math.round(od / 100))}</span><small> zł</small>`;
+  return `<span data-licz="${esc(klucz)}" data-od="${od}" data-do="${doGr}">${f0.format(Math.round(od / 100))}</span><small> zł</small>`;
 }
 function animujLiczby() {
   for (const el of document.querySelectorAll("[data-licz]")) {
@@ -207,7 +207,7 @@ function kolkoPozycji(x) {
 function wierszPozycji(x, gdzie) {
   const kat = nazwaKat(x.p.kat), pod = [gdzie ? (x.p.zakup ? "Zakup domu" : nazwaPom(x.p.pom)) : "", kat && kat !== x.p.nazwa ? kat : "", x.p.produkty?.length ? `${x.p.produkty.length} prod.` : ""].filter(Boolean);
   const plan = x.p.zakonczona ? "zakończone" : x.ponad ? `ponad plan o ${zl(x.zapl - x.plan)}` : x.plan ? `z ${zl(x.plan)}` : x.wPakiecie ? "z budżetu pakietu" : "bez planu";
-  return `<a class="poz" href="#poz/${esc(x.p.id)}" style="view-transition-name:poz-${esc(x.p.id)}">
+  return `<a class="poz" href="#poz/${esc(x.p.id)}" style="view-transition-name:${Logika.nazwaPrzejscia("poz", x.p.id)}">
     ${kolkoPozycji(x)}
     <span class="poz-t"><span class="poz-n">${esc(x.p.nazwa)}</span>${pod.length ? `<span class="poz-m">${pod.map(esc).join(", ")}</span>` : ""}</span>
     <span class="poz-c"><span class="poz-v">${kw(x.zapl)}</span><span class="poz-p ${x.ponad && !x.wPakiecie ? "zle" : ""}">${plan}</span></span>
@@ -225,7 +225,7 @@ function pierscien(proc) {
   const rysuj = poprz !== p ? ` rysuj" style="--od:${(c * poprz) / 100}px` : "";
   return `<svg class="ring" viewBox="0 0 76 76" aria-hidden="true"><circle cx="38" cy="38" r="${r}" class="ring-t"/><circle cx="38" cy="38" r="${r}" class="ring-v${rysuj}" stroke-dasharray="${(c * p) / 100} ${c}" transform="rotate(-90 38 38)"/></svg>`;
 }
-const naglowek = (tytul, wstecz, prawy = "") => `<header class="top">${wstecz ? `<a class="okr" href="${wstecz}" aria-label="Wstecz">${ikona("wstecz")}</a>` : ""}<h1>${tytul}</h1>${prawy}</header>`;
+const naglowek = (tytul, wstecz, prawy = "") => `<header class="top">${wstecz ? `<a class="okr" href="${esc(wstecz)}" aria-label="Wstecz">${ikona("wstecz")}</a>` : ""}<h1>${tytul}</h1>${prawy}</header>`;
 
 /* ---------- ekran: Dom ---------- */
 function ekranDom() {
@@ -252,7 +252,7 @@ function ekranDom() {
   for (const x of w) { const k = pom().some((r) => r.id === x.p.pom) ? x.p.pom : ""; if (!grupy.has(k)) grupy.set(k, []); grupy.get(k).push(x); }
   const kafle = pom().map((r) => ({ r, s: suma(grupy.get(r.id) || []) }));
   h += `<div class="sekcja-h"><h2>Pomieszczenia</h2><a class="lnk" href="#ustawienia">Edytuj</a></div><div class="kafle">${kafle.map(({ r, s: g }) => `
-    <a class="kafel" href="#pom/${esc(r.id)}" style="--k:${kolorPom(r.id)};view-transition-name:pom-${esc(r.id)}">
+    <a class="kafel" href="#pom/${esc(r.id)}" style="--k:${kolorPom(r.id)};view-transition-name:${Logika.nazwaPrzejscia("pom", r.id)}">
       <span class="kafel-t"><span class="okr-b">${ikonaPom(r.id)}</span><span class="kafel-n">${esc(r.nazwa)}</span></span>
       <span class="kafel-v">${kw(g.zostalo)}</span>
       <span class="kafel-s">${g.n ? `zostało z ${zl(g.plan)}` : "brak pozycji"}</span>
@@ -274,7 +274,7 @@ function ekranPom(id) {
   if (!r) return naglowek("Nie ma takiego pomieszczenia", "#dom");
   const xs = wykonczenie().filter((x) => x.p.pom === id), s = suma(xs);
   let h = naglowek(esc(r.nazwa), "#dom");
-  h += `<section class="hero" style="--k:${kolorPom(id)};view-transition-name:pom-${esc(id)}"><div class="hero-g"><div><p class="hero-l">Zostało do wydania</p><p class="hero-v">${kwL("pom-" + id, s.zostalo)}</p><p class="hero-s">wydane ${zl(s.zapl)} z ${zl(s.plan)}</p></div><span class="okr-b duza">${ikonaPom(id)}</span></div>${pasek(s.zapl, s.zostalo, s.plan)}</section>`;
+  h += `<section class="hero" style="--k:${kolorPom(id)};view-transition-name:${Logika.nazwaPrzejscia("pom", id)}"><div class="hero-g"><div><p class="hero-l">Zostało do wydania</p><p class="hero-v">${kwL("pom-" + id, s.zostalo)}</p><p class="hero-s">wydane ${zl(s.zapl)} z ${zl(s.plan)}</p></div><span class="okr-b duza">${ikonaPom(id)}</span></div>${pasek(s.zapl, s.zostalo, s.plan)}</section>`;
   const luzne = xs.filter((x) => !x.wPakiecie);
   const pakiety = [...new Set(xs.filter((x) => x.wPakiecie).map((x) => x.wPakiecie.id))].map((pid) => S.pakiety.get(pid));
   h += `<div class="sekcja-h"><h2>Pozycje</h2><span class="szary">${xs.length}</span></div>`;
@@ -292,11 +292,11 @@ function ekranPom(id) {
 function ekranPoz(id) {
   const x = licz().get(id);
   if (!x) return naglowek("Nie ma takiej pozycji", "#dom");
-  const p = x.p, wroc = p.zakup ? "#dom" : `#pom/${p.pom}`;
+  const p = x.p, wroc = p.zakup ? "#dom" : `#pom/${encodeURIComponent(p.pom)}`;
   const pl = platnosci().filter((q) => q.pozycja === id).sort((a, b) => (b.data || "").localeCompare(a.data || ""));
   const pr = p.produkty || [], kup = kupioneProdukty(), sumaPr = pr.reduce((a, q) => a + (q.cenaGr || 0), 0);
   let h = naglowek(esc(p.nazwa), wroc, `<button class="okr" type="button" data-edytuj-poz="${esc(id)}" aria-label="Edytuj pozycję">${ikona("olowek")}</button>`);
-  h += `<section class="hero" style="--k:${p.zakup ? "#E4E4EA" : kolorPom(p.pom)};view-transition-name:poz-${esc(id)}">
+  h += `<section class="hero" style="--k:${p.zakup ? "#E4E4EA" : kolorPom(p.pom)};view-transition-name:${Logika.nazwaPrzejscia("poz", id)}">
     <p class="hero-meta">${[p.zakup ? "Zakup domu" : nazwaPom(p.pom), nazwaKat(p.kat)].filter(Boolean).map(esc).join(" · ")}</p>
     <div class="trio"><div><p class="hero-l">Wydane</p><p class="trio-v">${kwL("poz-w-" + id, x.zapl)}</p></div><div><p class="hero-l">Plan</p><p class="trio-v">${x.plan ? kwL("poz-p-" + id, x.plan) : "—"}</p></div><div><p class="hero-l">Zostało</p><p class="trio-v">${kwL("poz-z-" + id, x.zostalo)}</p></div></div>
     ${pasek(x.zapl, x.zostalo, x.plan)}
@@ -569,7 +569,7 @@ async function usunPozycje() {
   if (n) { const e = $("#ep-blad"); e.textContent = `Ta pozycja ma ${n} płatności. Najpierw je usuń albo przenieś do innej pozycji.`; e.hidden = false; return; }
   if (!b.dataset.pewne) { b.dataset.pewne = "1"; b.textContent = "Tak, usuń"; return; }
   const p = poz(id);
-  try { await zmien(`Usunięto pozycję: ${p?.nazwa}`, (d) => { d.pozycje = d.pozycje.filter((q) => q.id !== id); }); zamknijArkusz(); location.hash = p?.zakup ? "#dom" : `#pom/${p?.pom}`; toast("Usunięto pozycję."); }
+  try { await zmien(`Usunięto pozycję: ${p?.nazwa}`, (d) => { d.pozycje = d.pozycje.filter((q) => q.id !== id); }); zamknijArkusz(); location.hash = p?.zakup ? "#dom" : `#pom/${encodeURIComponent(p?.pom ?? "")}`; toast("Usunięto pozycję."); }
   catch (e) { bladZapisu(e); }
 }
 

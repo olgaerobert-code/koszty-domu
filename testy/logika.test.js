@@ -87,3 +87,18 @@ test("noweKupione zwraca produkty, które dostały płatność od ostatniego raz
 test("noweKupione przy pierwszym wczytaniu nic nie zwraca", () => {
   assert.deepEqual([...L.noweKupione(null, [platnosc("a", 100, { produkt: "p1" })])], []);
 });
+
+/* ---------- bezpieczeństwo: dane z bazy trafiające do HTML i CSS ---------- */
+test("bezpiecznyKolor przepuszcza tylko kolor #RRGGBB", () => {
+  assert.equal(L.bezpiecznyKolor("#F8DA6B"), "#F8DA6B");
+  assert.equal(L.bezpiecznyKolor('#fff" onmouseover="x'), null);
+  assert.equal(L.bezpiecznyKolor("red;background:url(//zly)"), null);
+  assert.equal(L.bezpiecznyKolor(undefined), null);
+});
+test("nazwaPrzejscia daje poprawny identyfikator CSS z dowolnego id", () => {
+  const n = L.nazwaPrzejscia("pom", 'x"><img src=x onerror=alert(1)>;background:red');
+  assert.match(n, /^pom-[A-Za-z0-9_-]+$/);
+});
+test("nazwaPrzejscia rozróżnia różne id", () => {
+  assert.notEqual(L.nazwaPrzejscia("poz", "a b"), L.nazwaPrzejscia("poz", "a_b"));
+});

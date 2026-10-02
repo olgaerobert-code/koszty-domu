@@ -59,7 +59,16 @@
     return new Set(po.filter((q) => q.produkt && !bylo.has(q.produkt)).map((q) => q.produkt));
   }
 
-  const api = { parseKwota, policz, suma, wartoscLicznika, noweKupione };
+  /* Dane z bazy może zapisać każdy, kto zna kod domu, więc do CSS trafia tylko kolor #RRGGBB. */
+  function bezpiecznyKolor(k) {
+    return typeof k === "string" && /^#[0-9A-Fa-f]{6}$/.test(k) ? k : null;
+  }
+  /* view-transition-name z dowolnego id: litery, cyfry i „-” zostają, reszta jako _kod_ (różne id, różne nazwy). */
+  function nazwaPrzejscia(prefiks, id) {
+    return prefiks + "-" + String(id).replace(/[^A-Za-z0-9-]/g, (c) => "_" + c.codePointAt(0).toString(16) + "_");
+  }
+
+  const api = { parseKwota, policz, suma, wartoscLicznika, noweKupione, bezpiecznyKolor, nazwaPrzejscia };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Logika = api;
 })(typeof window !== "undefined" ? window : this);
