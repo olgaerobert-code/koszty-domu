@@ -90,11 +90,20 @@
     const farba = bezpiecznyKolor(kolor)?.toUpperCase() || "#E4E4EA";
     return { sciana: mieszaj(farba, "#FFFFFF", 0.57), farba, linia: mieszaj(farba, "#000000", 0.27) };
   }
+  /* Stan próbnika w wierszu pozycji. Kolejność ma znaczenie: zakończone wygrywa z ostrzeżeniem,
+     a zakup domu nie należy do planu wykończenia, więc nigdy nie jest „poza planem”. */
+  function stanProbnika(x) {
+    if (x.p.zakonczona) return "zakonczone";
+    if (!x.wPakiecie && !x.p.zakup && (x.ponad || (x.bezPlanu && x.zapl > 0))) return "poza";
+    if (x.plan > 0 && x.zapl >= x.plan) return "pelny";
+    if (!x.plan && x.wPakiecie) return "pakiet";
+    return "poziom";
+  }
   function powitanie(godzina) {
     return godzina >= 5 && godzina < 18 ? "Dzień dobry" : "Dobry wieczór";
   }
 
-  const api = { parseKwota, policz, suma, wartoscLicznika, noweKupione, bezpiecznyKolor, nazwaPrzejscia, bezpiecznyLink, procent, poziomFarby, odcienie, powitanie };
+  const api = { parseKwota, policz, suma, wartoscLicznika, noweKupione, bezpiecznyKolor, nazwaPrzejscia, bezpiecznyLink, procent, poziomFarby, odcienie, stanProbnika, powitanie };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Logika = api;
 })(typeof window !== "undefined" ? window : this);

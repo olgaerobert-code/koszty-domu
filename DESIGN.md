@@ -116,6 +116,8 @@ Robert otwiera aplikację na telefonie i jednym spojrzeniem widzi, ile wydał w 
 | Pakiet bez planu | pozycja w pakiecie bez własnego planu | pełna farba (budżet liczy pakiet) |
 | Zakup domu | pozycja zakupu | odcienie neutralne `--neutralny` |
 
+Stan wybiera `Logika.stanProbnika`, w tej kolejności: zakończone → poza planem → pełny → pakiet bez planu → poziom. Zakończona pozycja zawsze ma ✓, a zakup domu nigdy nie dostaje „!”, bo nie należy do planu wykończenia.
+
 ### Podpisy
 | Miejsce | Brak pozycji | Bez planu | W planie | Ponad plan |
 |---|---|---|---|---|

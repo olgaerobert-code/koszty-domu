@@ -202,13 +202,10 @@ function stanPozycji(x) {
   return "";
 }
 function probnik(x) {
-  const styl = zmienneBarw(barwy(x.p.pom, x.p.zakup));
-  const zle = !x.wPakiecie && (x.ponad || (x.bezPlanu && x.zapl));
-  if (zle) return `<span class="probnik probnik-zle" aria-hidden="true">!</span>`;
-  if (!x.plan && x.wPakiecie) return `<span class="probnik" style="${styl}" aria-hidden="true">${farbaEl("sw-" + x.p.id, 100)}</span>`;
-  const p = Logika.poziomFarby(x.zapl, x.plan);
-  if (x.p.zakonczona || (x.plan && p >= 100)) return `<span class="probnik probnik-pelny" style="${styl}" aria-hidden="true">${ikona("ok", 20)}</span>`;
-  return `<span class="probnik" style="${styl}" aria-hidden="true">${farbaEl("sw-" + x.p.id, p)}</span>`;
+  const styl = zmienneBarw(barwy(x.p.pom, x.p.zakup)), stan = Logika.stanProbnika(x);
+  if (stan === "poza") return `<span class="probnik probnik-zle" aria-hidden="true">!</span>`;
+  if (stan === "zakonczone" || stan === "pelny") return `<span class="probnik probnik-pelny" style="${styl}" aria-hidden="true">${ikona("ok", 20)}</span>`;
+  return `<span class="probnik" style="${styl}" aria-hidden="true">${farbaEl("sw-" + x.p.id, stan === "pakiet" ? 100 : Logika.poziomFarby(x.zapl, x.plan))}</span>`;
 }
 function wierszPozycji(x, gdzie) {
   const kat = nazwaKat(x.p.kat), pod = [gdzie ? (x.p.zakup ? "Zakup domu" : nazwaPom(x.p.pom)) : "", kat && kat !== x.p.nazwa ? kat : "", x.p.produkty?.length ? `${x.p.produkty.length} prod.` : ""].filter(Boolean);

@@ -140,3 +140,24 @@ test("procent wydanego planu bez górnej granicy, do podpisów", () => {
   assert.equal(L.procent(0, 15000), 0);
   assert.equal(L.procent(4940, 0), 0);
 });
+
+test("stanProbnika: zakończona pozycja ma ptaszek, nawet bez planu (zakup domu)", () => {
+  assert.equal(L.stanProbnika({ p: { zakonczona: true, zakup: true }, plan: 0, zapl: 857500, ponad: false, bezPlanu: true }), "zakonczone");
+});
+test("stanProbnika: zakup domu nigdy nie jest „poza planem”", () => {
+  assert.equal(L.stanProbnika({ p: { zakup: true }, plan: 0, zapl: 5700, ponad: false, bezPlanu: true }), "poziom");
+});
+test("stanProbnika: wydatek ponad plan albo bez planu to „poza planem”", () => {
+  assert.equal(L.stanProbnika({ p: {}, plan: 10000, zapl: 13000, ponad: true, bezPlanu: false }), "poza");
+  assert.equal(L.stanProbnika({ p: {}, plan: 0, zapl: 4940, ponad: false, bezPlanu: true }), "poza");
+});
+test("stanProbnika: plan wykorzystany co do grosza to pełny próbnik", () => {
+  assert.equal(L.stanProbnika({ p: {}, plan: 6800, zapl: 6800, ponad: false, bezPlanu: false }), "pelny");
+});
+test("stanProbnika: pozycja pakietu bez własnego planu korzysta z budżetu pakietu", () => {
+  assert.equal(L.stanProbnika({ p: {}, plan: 0, zapl: 25000, ponad: false, bezPlanu: false, wPakiecie: { id: "kazik" } }), "pakiet");
+});
+test("stanProbnika: część planu albo nic nie wydane to poziom farby", () => {
+  assert.equal(L.stanProbnika({ p: {}, plan: 45000, zapl: 21700, ponad: false, bezPlanu: false }), "poziom");
+  assert.equal(L.stanProbnika({ p: {}, plan: 0, zapl: 0, ponad: false, bezPlanu: true }), "poziom");
+});
