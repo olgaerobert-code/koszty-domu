@@ -73,7 +73,28 @@
     return typeof u === "string" && /^https?:\/\//i.test(u) ? u : null;
   }
 
-  const api = { parseKwota, policz, suma, wartoscLicznika, noweKupione, bezpiecznyKolor, nazwaPrzejscia, bezpiecznyLink };
+  /* Procent wydanego planu do podpisów: może przekroczyć 100, bez planu 0. */
+  function procent(wydane, plan) {
+    return plan > 0 ? Math.round((wydane / plan) * 100) : 0;
+  }
+  /* „Farba”: pomieszczenie wypełnia się kolorem od dołu tak, jak wydawane są pieniądze. */
+  function poziomFarby(wydane, plan) {
+    if (!plan || plan <= 0) return wydane > 0 ? 100 : 0;
+    return Math.min(procent(wydane, plan), 100);
+  }
+  const hexNaRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const rgbNaHex = (a) => "#" + a.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("").toUpperCase();
+  const mieszaj = (a, b, t) => rgbNaHex(hexNaRgb(a).map((v, i) => v * (1 - t) + hexNaRgb(b)[i] * t));
+  /* Ściana = kolor rozjaśniony do 45%, kreska farby = przyciemniony do 55% (kontrast ze ścianą ≥3:1). */
+  function odcienie(kolor) {
+    const farba = bezpiecznyKolor(kolor)?.toUpperCase() || "#E4E4EA";
+    return { sciana: mieszaj(farba, "#FFFFFF", 0.55), farba, linia: mieszaj(farba, "#000000", 0.45) };
+  }
+  function powitanie(godzina) {
+    return godzina >= 5 && godzina < 18 ? "Dzień dobry" : "Dobry wieczór";
+  }
+
+  const api = { parseKwota, policz, suma, wartoscLicznika, noweKupione, bezpiecznyKolor, nazwaPrzejscia, bezpiecznyLink, procent, poziomFarby, odcienie, powitanie };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Logika = api;
 })(typeof window !== "undefined" ? window : this);

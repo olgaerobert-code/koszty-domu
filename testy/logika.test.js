@@ -110,3 +110,33 @@ test("bezpiecznyLink przepuszcza tylko adresy http i https", () => {
   assert.equal(L.bezpiecznyLink("data:text/html,x"), null);
   assert.equal(L.bezpiecznyLink(""), null);
 });
+
+/* ---------- wygląd „farba”: poziom wypełnienia i odcienie ---------- */
+test("poziomFarby to procent wydanego planu, zaokrąglony i obcięty do 100", () => {
+  assert.equal(L.poziomFarby(21700, 45000), 48);
+  assert.equal(L.poziomFarby(15000, 10000), 100);
+  assert.equal(L.poziomFarby(0, 15000), 0);
+});
+test("poziomFarby bez planu: pełny, gdy coś wydano, pusty, gdy nic", () => {
+  assert.equal(L.poziomFarby(4940, 0), 100);
+  assert.equal(L.poziomFarby(0, 0), 0);
+});
+test("odcienie dają jasną ścianę i ciemną kreskę farby z koloru pomieszczenia", () => {
+  assert.deepEqual(L.odcienie("#F8DA6B"), { sciana: "#FCEEBC", farba: "#F8DA6B", linia: "#88783B" });
+});
+test("odcienie dla złego koloru wracają do neutralnej szarości", () => {
+  assert.equal(L.odcienie("red").farba, "#E4E4EA");
+});
+test("powitanie zależy od pory dnia", () => {
+  assert.equal(L.powitanie(8), "Dzień dobry");
+  assert.equal(L.powitanie(17), "Dzień dobry");
+  assert.equal(L.powitanie(18), "Dobry wieczór");
+  assert.equal(L.powitanie(2), "Dobry wieczór");
+});
+
+test("procent wydanego planu bez górnej granicy, do podpisów", () => {
+  assert.equal(L.procent(55000, 123544), 45);
+  assert.equal(L.procent(13000, 10000), 130);
+  assert.equal(L.procent(0, 15000), 0);
+  assert.equal(L.procent(4940, 0), 0);
+});

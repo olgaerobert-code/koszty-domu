@@ -8,6 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="ikona-dom-192.png">
 <link rel="apple-touch-icon" href="ikona-dom-180.png">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Koszty domu">
@@ -16,8 +17,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap">
 <style>
-/* Układ: jedna kolumna na telefon (max 520 px), pastelowe karty pomieszczeń, czarny pływający pasek na dole z „+” na środku.
-   Paleta z inspiracji Roberta: chłodne jasne tło, czerń na przyciskach, pastele kodują pomieszczenia. */
+/* Układ: jedna kolumna na telefon (max 520 px), pastelowe karty pomieszczeń, czarny pływający pasek na dole.
+   Paleta z inspiracji Roberta: chłodne jasne tło, czerń na przyciskach, pastele kodują pomieszczenia.
+   „Farba”: kolor pomieszczenia wypełnia kartę od dołu tak, jak wydawane są pieniądze (DESIGN.md). */
 :root {
   --tlo: #EFEFF3;
   --karta: #FFFFFF;
@@ -46,10 +48,15 @@
   --biel-nieakt: rgba(255,255,255,.62);
   --zaslona: rgba(20,20,28,.38);
   --cien: 0 10px 30px rgba(0,0,0,.22);
+  /* „Farba”: ściana, farba i kreska kart liczy Logika.odcienie; tu tylko stałe elementy */
+  --domek-sciana: #F0EFFC;
+  --domek-linia: #88783B;
+  --sz-ciemny: #E4E4EA; --sz-jasny: #F1F1F5;
   /* skala pisma */
   --t-xs: 12.5px; --t-s: 13.5px; --t-m: 15px; --t-l: 17px; --t-xl: 21px; --t-2xl: 26px; --t-3xl: 30px; --t-hero: 42px;
   /* ruch */
   --ruch-klik: 120ms; --ruch-szybki: 180ms; --ruch-sredni: 300ms; --ruch-wolny: 900ms;
+  --ruch-farba: 1.1s; --ruch-farba-odstep: 45ms; --ruch-domek: 1.2s; --ruch-mieni: 1.3s;
   --ease-wyjscie: cubic-bezier(.2,.8,.2,1);
   --ease-sprezyna: cubic-bezier(.34,1.56,.64,1);
   color-scheme: light;
@@ -90,23 +97,64 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .hero-s { margin: 4px 0 0; font-size: var(--t-s); color: var(--tusz-2); }
 .hero-meta { margin: 0; font-weight: 600; font-size: var(--t-s); }
 .hero-tag { margin: 0; }
-.hero-r { position: relative; width: 76px; height: 76px; flex: none; display: grid; place-items: center; }
-.hero-r span { position: absolute; font: 800 var(--t-xl)/1 var(--f-disp); }
-.hero-r span.duzo { font-size: var(--t-m); }
-.ring { width: 76px; height: 76px; }
-.ring-t { fill: none; stroke: rgba(255,255,255,.65); stroke-width: 8; }
-.ring-v { fill: none; stroke: var(--czern); stroke-width: 8; stroke-linecap: round; }
 .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .trio-v { margin: 2px 0 0; font: 800 var(--t-xl)/1.1 var(--f-disp); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 
-/* pasek postępu: czarne = zapłacone, kreskowane = zostało */
-.bar { position: relative; display: flex; gap: 3px; height: 12px; border-radius: 99px; background: var(--tusz-tor); overflow: visible; }
-.bar i { display: block; height: 100%; border-radius: 99px; min-width: 6px; }
-.bar .z { background: var(--czern); }
-.bar .r { background: repeating-linear-gradient(-50deg, rgba(0,0,0,.7) 0 1.6px, transparent 1.6px 5px); box-shadow: inset 0 0 0 1.4px rgba(0,0,0,.7); }
-.bar .lim { position: absolute; top: -4px; bottom: -4px; width: 3px; margin-left: -1.5px; border-radius: 2px; background: var(--zle); }
 
 /* dwa małe kafle pod kartą główną */
+.hero-dom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hero-dom .hero-v { font-size: clamp(32px, 10vw, var(--t-hero)); }
+/* „Farba”: kolor pomieszczenia wypełnia element od dołu; kreska na linii farby jak po taśmie malarskiej */
+.farbowana, .kafel { position: relative; overflow: hidden; isolation: isolate; background: var(--sciana); }
+.farbowana > :not(.farba), .kafel > :not(.farba), .probnik > :not(.farba) { position: relative; }
+/* na dużych kartach granica farby to dwa odcienie, bez kreski: kreska przez kwotę wyglądałaby jak przekreślenie */
+.farba { position: absolute; left: 0; right: 0; bottom: 0; background: var(--farba); pointer-events: none; }
+.hero-dol { margin-top: 4px; font-weight: 600; color: var(--czern); }
+.farbowana.hero-poz { align-content: start; padding-bottom: 60px; }
+.farbowana.hero-poz .hero-dol { position: absolute; left: 20px; right: 20px; bottom: 18px; }
+.farbowana { min-height: 196px; align-content: space-between; }
+.probnik { position: relative; overflow: hidden; width: 46px; height: 46px; border-radius: var(--r-maly); background: var(--sciana); display: grid; place-items: center; flex: none; }
+.probnik .farba { border-top: 2.5px solid var(--linia); }
+.probnik .farba.pusta, .probnik .farba.pelna { border-top: 0; }
+.probnik-pelny { background: var(--farba); box-shadow: inset 0 0 0 2px var(--linia); }
+.probnik-pelny .ik { stroke-width: 2.4; }
+.probnik-zle { background: var(--uwaga); font: 800 var(--t-xl)/1 var(--f-disp); }
+.domek { width: 104px; height: 104px; flex: none; overflow: visible; }
+.domek-komin { fill: var(--czern); }
+.domek-sciana { fill: var(--domek-sciana); }
+.domek-farba-r { fill: var(--zolty); }
+.domek-linia { fill: var(--domek-linia); }
+.domek-obrys { fill: none; stroke: var(--czern); stroke-width: 5; stroke-linejoin: round; }
+.domek-proc { font: 800 19px/1 var(--f-disp); fill: var(--czern); paint-order: stroke; stroke: var(--domek-sciana); stroke-width: 5px; stroke-linejoin: round; }
+.domek-proc.duzo { font-size: 15px; }
+.awatar { position: relative; width: 46px; height: 46px; border-radius: var(--r-maly); background: var(--lawenda); display: grid; place-items: center; flex: none; margin-bottom: 4px; }
+.awatar .sync { position: absolute; right: -3px; top: -3px; margin: 0; width: 13px; height: 13px; border: 2.5px solid var(--tlo); }
+.wk-rzad { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; padding: 2px 16px 6px; margin: 0 -16px; }
+.wk-rzad::-webkit-scrollbar { display: none; }
+.wk-karta { flex: none; display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 12px 18px 12px 12px; border-radius: var(--r-sredni); background: var(--karta); }
+.wk-karta b { display: block; font-size: var(--t-m); }
+.wk-inicjal { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font: 800 var(--t-l)/1 var(--f-disp); }
+.wk-kwota { font: 700 var(--t-m)/1.2 var(--f-disp); }
+.zakup .zakup-g { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0 8px; }
+.zakup .zakup-g > span:first-child { display: grid; font-size: var(--t-s); color: var(--tekst-2); }
+.zakup .zakup-g b { color: var(--czern); font-size: var(--t-m); }
+.zakup-v { font: 800 var(--t-xl)/1 var(--f-disp); white-space: nowrap; }
+.zakup .wk { min-height: 46px; align-items: center; padding: 10px 0; font-size: var(--t-s); font-weight: 500; border-top: 1px solid var(--linia); }
+.zakup .wk .num { font-size: var(--t-m); }
+.chip-szary { background: var(--tlo); }
+.chip-kontur { background: transparent; box-shadow: inset 0 0 0 1.5px var(--czern); font-weight: 700; }
+.pl-n .kropka { margin-right: 8px; vertical-align: 1px; }
+/* tekst tylko dla czytnika ekranu */
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* szkielet ładowania */
+.szkielet { display: grid; gap: 12px; padding-top: 8px; }
+.sz { display: block; border-radius: var(--r-sredni); background: linear-gradient(90deg, var(--sz-ciemny) 0%, var(--sz-jasny) 50%, var(--sz-ciemny) 100%) 0 0 / 200% 100%; }
+.sz-tekst { width: 46%; height: 16px; border-radius: 8px; }
+.sz-tytul { width: 62%; height: 32px; border-radius: 10px; margin-bottom: 8px; }
+.sz-hero { height: 150px; border-radius: var(--r-duzy); }
+.sz-duo, .sz-kafle { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sz-mini { height: 110px; }
+.sz-kafel { height: 150px; }
 .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
 .mini { border: 0; text-align: left; border-radius: var(--r-sredni); padding: 16px; display: grid; gap: 2px; align-content: start; cursor: pointer; min-width: 0; }
 .mini-y { background: var(--zolty); }
@@ -130,17 +178,17 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 
 /* kafle pomieszczeń */
 .kafle { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.kafel { --k: var(--neutralny); background: var(--k); border-radius: var(--r-sredni); padding: 14px 14px 16px; display: grid; gap: 4px; min-width: 0; align-content: start; }
+.kafel { border-radius: var(--r-sredni); padding: 14px 14px 16px; display: grid; grid-template-rows: auto auto auto 1fr; gap: 2px; min-width: 0; min-height: 164px; }
 .kafel-t { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; min-width: 0; }
 .kafel-n { font-weight: 700; font-size: var(--t-m); line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
 .kafel-v { font: 800 var(--t-xl)/1.05 var(--f-disp); letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.kafel-s { font-size: var(--t-xs); color: var(--tusz-2); margin-bottom: 8px; font-weight: 500; }
-.kafel .bar { height: 9px; }
+.kafel-s { font-size: var(--t-xs); color: var(--tusz-2); font-weight: 500; }
 .okr-b { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.75); display: grid; place-items: center; flex: none; }
 .okr-b.duza { width: 64px; height: 64px; }
 .okr-b.duza .ik { width: 30px; height: 30px; }
 
-.pakiet { display: grid; gap: 8px; background: var(--karta); border-radius: var(--r-sredni); padding: 16px; margin-bottom: 10px; }
+.pakiet { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; background: var(--karta); border-radius: var(--r-sredni); padding: 14px 16px; margin-bottom: 10px; }
+.pakiet-t { display: grid; gap: 4px; min-width: 0; }
 .pakiet-g { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
 .pakiet-n { font-weight: 700; }
 .pakiet-v { font: 800 var(--t-xl)/1 var(--f-disp); white-space: nowrap; }
@@ -159,15 +207,6 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .poz-v { font: 700 var(--t-l)/1.15 var(--f-disp); letter-spacing: -.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .poz-p { font-size: var(--t-xs); color: var(--tekst-2); font-weight: 600; white-space: nowrap; }
 .poz-p.zle { color: var(--zle); }
-.kolko { --k: var(--neutralny); position: relative; width: 48px; height: 48px; border-radius: 50%; background: var(--k); display: grid; place-items: center; flex: none; }
-.kolko svg { position: absolute; inset: 0; width: 48px; height: 48px; }
-.kolko-t { fill: none; stroke: var(--biel-tor); stroke-width: 4.5; }
-.kolko-v { fill: none; stroke: var(--czern); stroke-width: 4.5; stroke-linecap: round; }
-.kolko b { position: relative; font: 800 var(--t-xs)/1 var(--f-disp); }
-.kolko-zle { background: var(--uwaga); font: 800 var(--t-xl)/1 var(--f-disp); }
-.kolko b.zero { color: var(--tusz-2); }
-.kolko-pelne { box-shadow: inset 0 0 0 3px var(--czern); }
-.kolko-pelne .ik { stroke-width: 2.2; width: 18px; height: 18px; }
 .pakiet-grupa { margin-top: 12px; }
 .pakiet-gl { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0 12px; border-bottom: 1px dashed var(--tusz-krawedz); }
 .pakiet-gl > span:first-child { display: grid; gap: 2px; min-width: 0; font-size: var(--t-s); color: var(--tekst-2); }
@@ -268,8 +307,13 @@ textarea.pole { resize: vertical; }
   .kafel:active, .mini:active, .alert:active, .pakiet:active { transform: scale(.97); }
   .poz:active, .pl:active, .wk:active, .pakiet-gl:active { transform: scale(.985); }
   .chip:active, .btn-czarny:active, .btn-jasny:active, .okr:active, .lnk:active, #nav a:active, .dodaj-wiersz:active { transform: scale(.94); }
-  .ring-v.rysuj { animation: rysuj var(--ruch-wolny) var(--ease-wyjscie) both; }
   .tag.pop { animation: pop .6s var(--ease-sprezyna); }
+  .farba.wznosi { animation: farba-w var(--ruch-farba) var(--ease-wyjscie) both; animation-delay: calc(var(--i, 0) * var(--ruch-farba-odstep)); }
+  .domek-farba.wznosi { animation: domek-w var(--ruch-domek) var(--ease-wyjscie) both; }
+  .sz { animation: mieni var(--ruch-mieni) linear infinite; }
+  @keyframes farba-w { from { height: var(--od); } }
+  @keyframes domek-w { from { transform: translateY(var(--od-dy)); } }
+  @keyframes mieni { to { background-position: -200% 0; } }
   #toast:not([hidden]) { animation: toast-in var(--ruch-sredni) var(--ease-sprezyna); }
   ::view-transition-group(*) { animation-duration: var(--ruch-sredni); animation-timing-function: var(--ease-wyjscie); }
   ::view-transition-old(root) { animation: zanik-out var(--ruch-szybki) ease-in both; }
@@ -278,7 +322,6 @@ textarea.pole { resize: vertical; }
   @keyframes zjazd { to { transform: translateY(70px); opacity: 0; } }
   @keyframes zanik-in { from { opacity: 0; } }
   @keyframes zanik-out { to { opacity: 0; } }
-  @keyframes rysuj { from { stroke-dasharray: var(--od) 999; } }
   @keyframes pop { 0% { transform: scale(.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
   @keyframes toast-in { from { transform: translate(-50%, -24px) scale(.96); opacity: 0; } }
 }
@@ -287,8 +330,8 @@ textarea.pole { resize: vertical; }
 
 /* dolny pasek */
 #nav { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); z-index: 30; width: min(calc(100% - 32px), 420px); height: 66px; border-radius: 99px; background: var(--czern); display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; padding: 0 8px; box-shadow: var(--cien); }
-#nav a { height: 48px; display: grid; place-items: center; color: var(--biel-nieakt); border-radius: 99px; }
-#nav a.on { color: #fff; }
+#nav a { width: 52px; height: 52px; justify-self: center; display: grid; place-items: center; color: var(--biel-nieakt); border-radius: 50%; }
+#nav a.on { color: var(--czern); background: var(--zolty); }
 #nav a.on .ik { stroke-width: 2.3; }
 
 #toast { position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 12px); z-index: 70; background: var(--czern); color: #fff; padding: 12px 20px; border-radius: 99px; font-weight: 600; font-size: var(--t-s); max-width: calc(100% - 32px); text-align: center; }
@@ -310,7 +353,7 @@ textarea.pole { resize: vertical; }
 
 <div id="zaslona" hidden><div id="arkusz" role="dialog" aria-modal="true"></div></div>
 <div id="toast" role="status" hidden></div>
-<script src="logika.js?v=3"></script>
-<script src="app.js?v=14"></script>
+<script src="logika.js?v=5"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>
