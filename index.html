@@ -36,6 +36,7 @@
   --r-duzy: 28px;
   --r-sredni: 22px;
   --r-maly: 16px;
+  --r-kafel: 21px;
   /* stany */
   --zle-tlo: #FADAD6; --zle-tekst: #A3241A;
   --ok-tlo: #D7F0E0;
@@ -50,13 +51,12 @@
   --cien: 0 10px 30px rgba(0,0,0,.22);
   /* „Farba”: ściana, farba i kreska kart liczy Logika.odcienie; tu tylko stałe elementy */
   --domek-sciana: #F0EFFC;
-  --domek-linia: #88783B;
   --sz-ciemny: #E4E4EA; --sz-jasny: #F1F1F5;
   /* skala pisma */
   --t-xs: 12.5px; --t-s: 13.5px; --t-m: 15px; --t-l: 17px; --t-xl: 21px; --t-2xl: 26px; --t-3xl: 30px; --t-hero: 42px;
   /* ruch */
   --ruch-klik: 120ms; --ruch-szybki: 180ms; --ruch-sredni: 300ms; --ruch-wolny: 900ms;
-  --ruch-farba: 1.1s; --ruch-farba-odstep: 45ms; --ruch-domek: 1.2s; --ruch-mieni: 1.3s;
+  --ruch-farba: .95s; --ruch-farba-odstep: 50ms; --ruch-mieni: 1.3s;
   --ease-wyjscie: cubic-bezier(.2,.8,.2,1);
   --ease-sprezyna: cubic-bezier(.34,1.56,.64,1);
   color-scheme: light;
@@ -104,26 +104,22 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 /* dwa małe kafle pod kartą główną */
 .hero-dom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .hero-dom .hero-v { font-size: clamp(32px, 10vw, var(--t-hero)); }
-/* „Farba”: kolor pomieszczenia wypełnia element od dołu; kreska na linii farby jak po taśmie malarskiej */
+/* „Farba”: kolor pomieszczenia wypełnia element od dołu; granicę tworzą dwa odcienie, bez kreski */
 .farbowana, .kafel { position: relative; overflow: hidden; isolation: isolate; background: var(--sciana); }
 .farbowana > :not(.farba), .kafel > :not(.farba), .probnik > :not(.farba) { position: relative; }
-/* na dużych kartach granica farby to dwa odcienie, bez kreski: kreska przez kwotę wyglądałaby jak przekreślenie */
 .farba { position: absolute; left: 0; right: 0; bottom: 0; background: var(--farba); pointer-events: none; }
 .hero-dol { margin-top: 4px; font-weight: 600; color: var(--czern); }
 .farbowana.hero-poz { align-content: start; padding-bottom: 60px; }
 .farbowana.hero-poz .hero-dol { position: absolute; left: 20px; right: 20px; bottom: 18px; }
 .farbowana { min-height: 196px; align-content: space-between; }
 .probnik { position: relative; overflow: hidden; width: 46px; height: 46px; border-radius: var(--r-maly); background: var(--sciana); display: grid; place-items: center; flex: none; }
-.probnik .farba { border-top: 2.5px solid var(--linia); }
-.probnik .farba.pusta, .probnik .farba.pelna { border-top: 0; }
-.probnik-pelny { background: var(--farba); box-shadow: inset 0 0 0 2px var(--linia); }
+.probnik-pelny { background: var(--farba); box-shadow: inset 0 0 0 2px var(--kreska); }
 .probnik-pelny .ik { stroke-width: 2.4; }
 .probnik-zle { background: var(--uwaga); font: 800 var(--t-xl)/1 var(--f-disp); }
 .domek { width: 104px; height: 104px; flex: none; overflow: visible; }
 .domek-komin { fill: var(--czern); }
 .domek-sciana { fill: var(--domek-sciana); }
 .domek-farba-r { fill: var(--zolty); }
-.domek-linia { fill: var(--domek-linia); }
 .domek-obrys { fill: none; stroke: var(--czern); stroke-width: 5; stroke-linejoin: round; }
 .domek-proc { font: 800 19px/1 var(--f-disp); fill: var(--czern); paint-order: stroke; stroke: var(--domek-sciana); stroke-width: 5px; stroke-linejoin: round; }
 .domek-proc.duzo { font-size: 15px; }
@@ -154,7 +150,7 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .sz-hero { height: 150px; border-radius: var(--r-duzy); }
 .sz-duo, .sz-kafle { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .sz-mini { height: 110px; }
-.sz-kafel { height: 150px; }
+.sz-kafel { height: 150px; border-radius: var(--r-kafel); }
 .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
 .mini { border: 0; text-align: left; border-radius: var(--r-sredni); padding: 16px; display: grid; gap: 2px; align-content: start; cursor: pointer; min-width: 0; }
 .mini-y { background: var(--zolty); }
@@ -178,7 +174,7 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 
 /* kafle pomieszczeń */
 .kafle { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.kafel { border-radius: var(--r-sredni); padding: 14px 14px 16px; display: grid; grid-template-rows: auto auto auto 1fr; gap: 2px; min-width: 0; min-height: 164px; }
+.kafel { border-radius: var(--r-kafel); padding: 14px 14px 16px; display: grid; grid-template-rows: auto auto auto 1fr; gap: 2px; min-width: 0; min-height: 164px; }
 .kafel-t { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; min-width: 0; }
 .kafel-n { font-weight: 700; font-size: var(--t-m); line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
 .kafel-v { font: 800 var(--t-xl)/1.05 var(--f-disp); letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -308,8 +304,8 @@ textarea.pole { resize: vertical; }
   .poz:active, .pl:active, .wk:active, .pakiet-gl:active { transform: scale(.985); }
   .chip:active, .btn-czarny:active, .btn-jasny:active, .okr:active, .lnk:active, #nav a:active, .dodaj-wiersz:active { transform: scale(.94); }
   .tag.pop { animation: pop .6s var(--ease-sprezyna); }
-  .farba.wznosi { animation: farba-w var(--ruch-farba) var(--ease-wyjscie) both; animation-delay: calc(var(--i, 0) * var(--ruch-farba-odstep)); }
-  .domek-farba.wznosi { animation: domek-w var(--ruch-domek) var(--ease-wyjscie) both; }
+  .farba.wznosi { animation: farba-w var(--ruch-farba) var(--ease-sprezyna) both; animation-delay: calc(var(--i, 0) * var(--ruch-farba-odstep)); }
+  .domek-farba.wznosi { animation: domek-w var(--ruch-farba) var(--ease-sprezyna) both; }
   .sz { animation: mieni var(--ruch-mieni) linear infinite; }
   @keyframes farba-w { from { height: var(--od); } }
   @keyframes domek-w { from { transform: translateY(var(--od-dy)); } }
@@ -353,7 +349,7 @@ textarea.pole { resize: vertical; }
 
 <div id="zaslona" hidden><div id="arkusz" role="dialog" aria-modal="true"></div></div>
 <div id="toast" role="status" hidden></div>
-<script src="logika.js?v=5"></script>
-<script src="app.js?v=18"></script>
+<script src="logika.js?v=6"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

@@ -18,17 +18,17 @@ Aplikacja na telefon. Inspiracja: pastelowe karty z dużym zaokrągleniem, czarn
 | `--ok`, `--ok-tlo` | `#1E7445`, `#D7F0E0` | zakończone, kupione, zapas |
 | `--uwaga` | `#FBD2AE` | „poza planem” |
 | `--tusz-2` | czerń 72% | podpisy na pastelach (min. 6,3:1 na farbie i ścianie) |
-| `--domek-sciana`, `--domek-linia` | `#F0EFFC`, `#88783B` | ściana domku-wskaźnika i kreska jego farby |
+| `--domek-sciana` | `#F0EFFC` | ściana domku-wskaźnika i obwódka procentu |
 | `--sz-ciemny`, `--sz-jasny` | `#E4E4EA`, `#F1F1F5` | szkielet ładowania |
 
 Kolor pomieszczenia zapisany w bazie przechodzi przez `Logika.bezpiecznyKolor`: tylko `#RRGGBB`, inaczej pastel z palety.
 
-**Odcienie farby** liczy `Logika.odcienie(kolor)` i podaje je elementowi jako zmienne `--sciana`, `--farba`, `--linia`:
+**Odcienie farby** liczy `Logika.odcienie(kolor)` i podaje je elementowi jako zmienne `--sciana`, `--farba`, `--kreska`:
 - `--farba` = kolor pomieszczenia,
-- `--sciana` = kolor zmieszany z bielą w 55%,
-- `--linia` = kolor zmieszany z czernią w 45%.
+- `--sciana` = kolor zmieszany z bielą w 57%,
+- `--kreska` = kolor zmieszany z czernią w 27% (tylko obwódka pełnego próbnika).
 
-Kreska `--linia` ma kontrast ze ścianą co najmniej 3,7:1 (sprawdzone dla całej palety). Pastele są do siebie zbyt podobne, żeby same rozróżniały pomieszczenia, dlatego kolor nigdy nie niesie informacji sam: obok zawsze jest nazwa, ikona albo kwota.
+Granicę farby tworzą dwa odcienie, bez kreski: Robert wybrał to w stroiku 5 paź 2026 (https://claude.ai/artifact/AY5TrcB2W1UhP1gCTtS5jD). Pastele są do siebie zbyt podobne, żeby same rozróżniały pomieszczenia, dlatego kolor nigdy nie niesie informacji sam: obok zawsze jest nazwa, ikona albo kwota.
 
 ### Pismo
 - **Bricolage Grotesque** (700–800): liczby, tytuły, kwoty. Ciasny odstęp liter (−0,02em).
@@ -38,7 +38,7 @@ Kreska `--linia` ma kontrast ze ścianą co najmniej 3,7:1 (sprawdzone dla całe
 - Kwoty: liczba dużą czcionką, „zł” jako `<small>` (0,62em). Cyfry równej szerokości.
 
 ### Kształty i odstępy
-- Promienie: `--r-duzy` 28 (karty główne, arkusz), `--r-sredni` 22 (kafle, karty list), `--r-maly` 16 (pola, próbniki, awatar). Przyciski i chipy to pełna pigułka (99px).
+- Promienie: `--r-duzy` 28 (karty główne, arkusz), `--r-sredni` 22 (karty list, mini kafle), `--r-kafel` 21 (kafle pomieszczeń), `--r-maly` 16 (pola, próbniki, awatar). Przyciski i chipy to pełna pigułka (99px).
 - Kolumna max 520 px, margines 16 px, odstęp między kaflami 12 px, nad sekcją 28 px.
 - Każdy element do stuknięcia ma co najmniej 44×44 px.
 
@@ -49,7 +49,7 @@ Kreska `--linia` ma kontrast ze ścianą co najmniej 3,7:1 (sprawdzone dla całe
 | Domek-wskaźnik | `.domek` (SVG) | tylko na Dom: kształt ikony aplikacji, napełniony żółtą farbą do procentu wydanego budżetu, procent w środku |
 | Mini kafel | `.mini` | dwa obok siebie pod kartą główną (budżet, zostało do wydania) |
 | Kafel pomieszczenia | `.kafel` | siatka 2 kolumny na Dom: ikona, nazwa, „zostało”, farba od dołu |
-| Próbnik | `.probnik` | mały kwadrat 46 px przed nazwą pozycji i pakietu: ściana, farba i kreska; ✓ gdy zakończone lub plan wykorzystany, „!” gdy poza planem |
+| Próbnik | `.probnik` | mały kwadrat 46 px przed nazwą pozycji i pakietu: ściana i farba; ✓ gdy zakończone lub plan wykorzystany, „!” gdy poza planem |
 | Wiersz pozycji | `.poz` | próbnik, nazwa, pomieszczenie i kategoria, po prawej wydane i plan |
 | Wiersz płatności | `.pl` | kropka w kolorze pomieszczenia, nazwa, kwota, data i komu |
 | Karty „Komu płacisz” | `.wk-karta` | przewijany w bok rząd na Dom: inicjał w pastelowym kółku, nazwa, suma |
@@ -72,12 +72,11 @@ Zasada: ruch odpowiada na działanie użytkownika albo na zmianę danych. Sam z 
 | `--ruch-szybki` | 180 ms | zamykanie arkusza, zanik |
 | `--ruch-sredni` | 300 ms | wjazd arkusza, przejścia ekranów, komunikat |
 | `--ruch-wolny` | 900 ms | liczniki kwot |
-| `--ruch-farba` | 1,1 s | wznoszenie farby w kaflach, kartach i próbnikach |
-| `--ruch-farba-odstep` | 45 ms | opóźnienie między kolejnymi kaflami |
-| `--ruch-domek` | 1,2 s | farba w domku |
+| `--ruch-farba` | 0,95 s | wznoszenie farby w kaflach, kartach, próbnikach i domku |
+| `--ruch-farba-odstep` | 50 ms | opóźnienie między kolejnymi kaflami |
 | `--ruch-mieni` | 1,3 s | migotanie szkieletu |
 | `--ease-wyjscie` | `cubic-bezier(.2,.8,.2,1)` | domyślna krzywa |
-| `--ease-sprezyna` | `cubic-bezier(.34,1.56,.64,1)` | „podskok” (komunikat, plakietka kupione) |
+| `--ease-sprezyna` | `cubic-bezier(.34,1.56,.64,1)` | „podskok”: wznoszenie farby, komunikat, plakietka kupione |
 
 Efekty:
 1. **Przejście kafel → ekran** (View Transitions): kafel pomieszczenia zamienia się w kartę główną, wiersz pozycji w kartę pozycji. Nazwy przejść tylko z `Logika.nazwaPrzejscia`. Pominięte przejście (szybkie stuknięcia, obrót) jest ciche.
@@ -101,18 +100,18 @@ Robert otwiera aplikację na telefonie i jednym spojrzeniem widzi, ile wydał w 
 ### Elementy
 | Element | Wymiary | Farba | Kreska | Tekst |
 |---|---|---|---|---|
-| Kafel `.kafel` | min. wys. 164 px, padding 14/14/16, `--r-sredni` | od dołu, `height: N%` | brak (kreska przez kwotę wyglądałaby jak przekreślenie) | góra: ikona, nazwa, kwota „zostało”, podpis |
+| Kafel `.kafel` | min. wys. 164 px, padding 14/14/16, `--r-kafel` | od dołu, `height: N%` | brak | góra: ikona, nazwa, kwota „zostało”, podpis |
 | Karta pomieszczenia `.hero.farbowana` | min. wys. 196 px, `--r-duzy` | od dołu | brak | kwota u góry, podpis „wydane X z Y (P%)” na dole |
 | Karta pozycji `.hero-poz` | padding dołu 60 px na podpis | od dołu | brak | trzy liczby u góry, „wydane P% planu” przyklejone do dołu |
-| Próbnik `.probnik` | 46×46 px, `--r-maly` | od dołu | 2,5 px `--linia` (nie przy 0 i 100%) | brak |
-| Domek `.domek` | 104×104 px, viewBox 100 | żółta, od y=88 w górę do 71 jednostek | 2,4 jednostki `--domek-linia` | procent 19 px z obwódką w kolorze ściany |
+| Próbnik `.probnik` | 46×46 px, `--r-maly` | od dołu | brak | brak |
+| Domek `.domek` | 104×104 px, viewBox 100 | żółta, od y=88 w górę do 71 jednostek | brak | procent 19 px z obwódką w kolorze ściany |
 
 ### Stany próbnika
 | Stan | Warunek | Wygląd |
 |---|---|---|
-| Poziom | jest plan, wydane < plan | ściana + farba do N% + kreska |
+| Poziom | jest plan, wydane < plan | ściana + farba do N% |
 | Pusty | jest plan, nic nie wydano | sama ściana |
-| Pełny | zakończone albo wydane ≥ plan | cały w farbie, obwódka 2 px `--linia`, ✓ |
+| Pełny | zakończone albo wydane ≥ plan | cały w farbie, obwódka 2 px `--kreska`, ✓ |
 | Poza planem | poza pakietem: wydane > plan albo wydane bez planu | `--uwaga` z „!” |
 | Pakiet bez planu | pozycja w pakiecie bez własnego planu | pełna farba (budżet liczy pakiet) |
 | Zakup domu | pozycja zakupu | odcienie neutralne `--neutralny` |
@@ -127,9 +126,9 @@ Robert otwiera aplikację na telefonie i jednym spojrzeniem widzi, ile wydał w 
 ### Ruch
 | Element | Kiedy | Animacja | Czas | Krzywa |
 |---|---|---|---|---|
-| Farba kafli | pierwsze otwarcie Dom; zmiana danych | `height` od poprzedniego poziomu (`--od`) | `--ruch-farba`, kolejne kafle co `--ruch-farba-odstep` | `--ease-wyjscie` |
-| Farba kart i próbników | zmiana danych | jak wyżej, bez opóźnienia | `--ruch-farba` | `--ease-wyjscie` |
-| Farba domku | pierwsze otwarcie Dom; zmiana budżetu lub wydatków | `translateY` od poprzedniego poziomu (`--od-dy`) | `--ruch-domek` | `--ease-wyjscie` |
+| Farba kafli | pierwsze otwarcie Dom; zmiana danych | `height` od poprzedniego poziomu (`--od`) | `--ruch-farba`, kolejne kafle co `--ruch-farba-odstep` | `--ease-sprezyna` (lekko przeskakuje i osiada) |
+| Farba kart i próbników | zmiana danych | jak wyżej, bez opóźnienia | `--ruch-farba` | `--ease-sprezyna` |
+| Farba domku | pierwsze otwarcie Dom; zmiana budżetu lub wydatków | `translateY` od poprzedniego poziomu (`--od-dy`) | `--ruch-farba` | `--ease-sprezyna` |
 | Szkielet | czekanie na dane | przesuwany połysk | `--ruch-mieni`, w pętli | liniowa |
 
 Powrót na ekran bez zmiany danych nie uruchamia żadnej animacji.

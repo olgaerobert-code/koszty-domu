@@ -184,10 +184,10 @@ function animujLiczby() {
   S.pierwszyDom = false;
 }
 /* „Farba”: kolor pomieszczenia wypełnia element od dołu tak, jak wydawane są pieniądze.
-   Ściana = jasny odcień, kreska na linii farby = ciemny odcień (kontrast ≥3:1), liczby zawsze obok. */
+   Ściana = jasny odcień, farba = kolor pomieszczenia, granica bez kreski; liczby zawsze obok. */
 const najczestszyPokoj = (xs) => { const n = new Map(); for (const x of xs) n.set(x.p.pom, (n.get(x.p.pom) || 0) + 1); return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]; };
 const barwy = (pomId, neutralna) => Logika.odcienie(neutralna ? null : kolorPomHex(pomId));
-const zmienneBarw = (b) => `--sciana:${b.sciana};--farba:${b.farba};--linia:${b.linia}`;
+const zmienneBarw = (b) => `--sciana:${b.sciana};--farba:${b.farba};--kreska:${b.linia}`;
 function farbaEl(klucz, p, i = 0) {
   const poprz = S.farby[klucz] ?? (S.pierwszyDom && klucz.startsWith("dom") ? 0 : p);
   S.farby[klucz] = p;
@@ -233,7 +233,7 @@ function domek(p) {
   const poprz = S.farby["dom-domek"] ?? (S.pierwszyDom ? 0 : q); S.farby["dom-domek"] = q;
   const gora = 88 - (71 * q) / 100;
   const ruch = poprz !== q && !bezRuchu() ? ` class="domek-farba wznosi" style="--od-dy:${((q - poprz) * 0.71).toFixed(2)}px"` : ` class="domek-farba"`;
-  return `<svg class="domek" viewBox="0 0 100 100" role="img" aria-label="Wydane ${p}% budżetu"><defs><clipPath id="domek-ksztalt"><path d="${DOM_KSZTALT}"/></clipPath></defs><rect x="63" y="16" width="11" height="26" rx="5.5" class="domek-komin"/><g clip-path="url(#domek-ksztalt)"><rect width="100" height="100" class="domek-sciana"/><g${ruch}><rect x="0" y="${gora.toFixed(2)}" width="100" height="${(102 - gora).toFixed(2)}" class="domek-farba-r"/>${q > 0 && q < 100 ? `<rect x="0" y="${(gora - 1.2).toFixed(2)}" width="100" height="2.4" class="domek-linia"/>` : ""}</g></g><path d="${DOM_KSZTALT}" class="domek-obrys"/><text x="50" y="68" text-anchor="middle" class="domek-proc${p >= 100 ? " duzo" : ""}">${p}%</text></svg>`;
+  return `<svg class="domek" viewBox="0 0 100 100" role="img" aria-label="Wydane ${p}% budżetu"><defs><clipPath id="domek-ksztalt"><path d="${DOM_KSZTALT}"/></clipPath></defs><rect x="63" y="16" width="11" height="26" rx="5.5" class="domek-komin"/><g clip-path="url(#domek-ksztalt)"><rect width="100" height="100" class="domek-sciana"/><g${ruch}><rect x="0" y="${gora.toFixed(2)}" width="100" height="${(102 - gora).toFixed(2)}" class="domek-farba-r"/></g></g><path d="${DOM_KSZTALT}" class="domek-obrys"/><text x="50" y="68" text-anchor="middle" class="domek-proc${p >= 100 ? " duzo" : ""}">${p}%</text></svg>`;
 }
 const naglowek = (tytul, wstecz, prawy = "") => `<header class="top">${wstecz ? `<a class="okr" href="${esc(wstecz)}" aria-label="Wstecz">${ikona("wstecz")}</a>` : ""}<h1>${tytul}</h1>${prawy}</header>`;
 

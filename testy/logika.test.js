@@ -122,7 +122,7 @@ test("poziomFarby bez planu: pełny, gdy coś wydano, pusty, gdy nic", () => {
   assert.equal(L.poziomFarby(0, 0), 0);
 });
 test("odcienie dają jasną ścianę i ciemną kreskę farby z koloru pomieszczenia", () => {
-  assert.deepEqual(L.odcienie("#F8DA6B"), { sciana: "#FCEEBC", farba: "#F8DA6B", linia: "#88783B" });
+  assert.deepEqual(L.odcienie("#F8DA6B"), { sciana: "#FCEFBF", farba: "#F8DA6B", linia: "#B59F4E" });
 });
 test("odcienie dla złego koloru wracają do neutralnej szarości", () => {
   assert.equal(L.odcienie("red").farba, "#E4E4EA");
