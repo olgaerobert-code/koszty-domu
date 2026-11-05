@@ -36,7 +36,6 @@
   --r-duzy: 28px;
   --r-sredni: 22px;
   --r-maly: 16px;
-  --r-kafel: 21px;
   /* stany */
   --zle-tlo: #FADAD6; --zle-tekst: #A3241A;
   --ok-tlo: #D7F0E0;
@@ -50,7 +49,6 @@
   --zaslona: rgba(20,20,28,.38);
   --cien: 0 10px 30px rgba(0,0,0,.22);
   /* „Farba”: ściana, farba i kreska kart liczy Logika.odcienie; tu tylko stałe elementy */
-  --domek-sciana: #F0EFFC;
   --sz-ciemny: #E4E4EA; --sz-jasny: #F1F1F5;
   /* skala pisma */
   --t-xs: 12.5px; --t-s: 13.5px; --t-m: 15px; --t-l: 17px; --t-xl: 21px; --t-2xl: 26px; --t-3xl: 30px; --t-hero: 42px;
@@ -101,12 +99,17 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .trio-v { margin: 2px 0 0; font: 800 var(--t-xl)/1.1 var(--f-disp); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 
 
-/* dwa małe kafle pod kartą główną */
-.hero-dom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.hero-dom .hero-v { font-size: clamp(32px, 10vw, var(--t-hero)); }
+/* karta główna na Dom: jedna kwota i jedno zdanie, pod spodem link do budżetu */
+.hero-glowna { --k: var(--zolty); gap: 0; }
+.hero-glowna .hero-v { font-size: clamp(34px, 11vw, var(--t-hero)); }
+.hero-glowna .hero-v.zle { color: var(--zle); }
+.hero-zdanie { margin: 12px 0 0; font-size: var(--t-m); line-height: 1.45; color: var(--tusz-2); }
+.hero-zdanie b { color: var(--czern); font-variant-numeric: tabular-nums; }
+.hero-zdanie b.zle { color: var(--zle); }
+.hero-glowna .lnk { justify-self: start; margin-top: 6px; min-height: 36px; }
 /* „Farba”: kolor pomieszczenia wypełnia element od dołu; granicę tworzą dwa odcienie, bez kreski */
-.farbowana, .kafel { position: relative; overflow: hidden; isolation: isolate; background: var(--sciana); }
-.farbowana > :not(.farba), .kafel > :not(.farba), .probnik > :not(.farba) { position: relative; }
+.farbowana { position: relative; overflow: hidden; isolation: isolate; background: var(--sciana); }
+.farbowana > :not(.farba), .probnik > :not(.farba) { position: relative; }
 .farba { position: absolute; left: 0; right: 0; bottom: 0; background: var(--farba); pointer-events: none; }
 .hero-dol { margin-top: 4px; font-weight: 600; color: var(--czern); }
 .farbowana.hero-poz { align-content: start; padding-bottom: 60px; }
@@ -116,13 +119,6 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .probnik-pelny { background: var(--farba); box-shadow: inset 0 0 0 2px var(--kreska); }
 .probnik-pelny .ik { stroke-width: 2.4; }
 .probnik-zle { background: var(--uwaga); font: 800 var(--t-xl)/1 var(--f-disp); }
-.domek { width: 104px; height: 104px; flex: none; overflow: visible; }
-.domek-komin { fill: var(--czern); }
-.domek-sciana { fill: var(--domek-sciana); }
-.domek-farba-r { fill: var(--zolty); }
-.domek-obrys { fill: none; stroke: var(--czern); stroke-width: 5; stroke-linejoin: round; }
-.domek-proc { font: 800 19px/1 var(--f-disp); fill: var(--czern); paint-order: stroke; stroke: var(--domek-sciana); stroke-width: 5px; stroke-linejoin: round; }
-.domek-proc.duzo { font-size: 15px; }
 .awatar { position: relative; width: 46px; height: 46px; border-radius: var(--r-maly); background: var(--lawenda); display: grid; place-items: center; flex: none; margin-bottom: 4px; }
 .awatar .sync { position: absolute; right: -3px; top: -3px; margin: 0; width: 13px; height: 13px; border: 2.5px solid var(--tlo); }
 .wk-rzad { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; padding: 2px 16px 6px; margin: 0 -16px; }
@@ -148,13 +144,9 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .sz-tekst { width: 46%; height: 16px; border-radius: 8px; }
 .sz-tytul { width: 62%; height: 32px; border-radius: 10px; margin-bottom: 8px; }
 .sz-hero { height: 150px; border-radius: var(--r-duzy); }
-.sz-duo, .sz-kafle { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.sz-mini { height: 110px; }
-.sz-kafel { height: 150px; border-radius: var(--r-kafel); }
-.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.sz-lista { height: 300px; }
 .mini { border: 0; text-align: left; border-radius: var(--r-sredni); padding: 16px; display: grid; gap: 2px; align-content: start; cursor: pointer; min-width: 0; }
 .mini-y { background: var(--zolty); }
-.mini-w { background: var(--karta); cursor: default; }
 .mini-l { margin: 0; font-weight: 600; font-size: var(--t-s); }
 .mini-v { margin: 6px 0 0; font: 800 var(--t-xl)/1.05 var(--f-disp); letter-spacing: -.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .mini-s { margin: 4px 0 0; font-size: var(--t-s); color: rgba(0,0,0,.7); font-weight: 600; }
@@ -172,13 +164,13 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .sekcja-h h2 { margin: 0; font: 700 var(--t-xl)/1.1 var(--f-disp); letter-spacing: -.015em; }
 .lnk { display: inline-flex; align-items: center; min-height: 44px; border: 0; background: none; padding: 0 4px; font-weight: 700; font-size: var(--t-s); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
-/* kafle pomieszczeń */
-.kafle { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.kafel { border-radius: var(--r-kafel); padding: 14px 14px 16px; display: grid; grid-template-rows: auto auto auto 1fr; gap: 2px; min-width: 0; min-height: 164px; }
-.kafel-t { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; min-width: 0; }
-.kafel-n { font-weight: 700; font-size: var(--t-m); line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
-.kafel-v { font: 800 var(--t-xl)/1.05 var(--f-disp); letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.kafel-s { font-size: var(--t-xs); color: var(--tusz-2); font-weight: 500; }
+/* wiersze pomieszczeń na Dom */
+/* wiersz pomieszczenia na Dom: bez próbnika, z paskiem wydanego planu na całą szerokość */
+.poz.grupa { grid-template-columns: minmax(0, 1fr) auto; }
+.poz.grupa .poz-n { display: flex; align-items: center; gap: 8px; }
+.pasek { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--tlo); overflow: hidden; margin-top: 2px; }
+.pasek i { display: block; height: 100%; background: var(--farba, var(--zolty)); }
+.pasek i.zle { background: var(--zle); }
 .okr-b { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.75); display: grid; place-items: center; flex: none; }
 .okr-b.duza { width: 64px; height: 64px; }
 .okr-b.duza .ik { width: 30px; height: 30px; }
@@ -299,16 +291,14 @@ textarea.pole { resize: vertical; }
   #zaslona:not([hidden]) { animation: zanik-in var(--ruch-szybki) ease-out; }
   #zaslona.zamyka { animation: zanik-out var(--ruch-szybki) ease-in forwards; }
   #zaslona.zamyka #arkusz { animation: zjazd var(--ruch-szybki) ease-in forwards; }
-  .kafel, .poz, .pl, .chip, .btn-czarny, .btn-jasny, .mini, .alert, .pakiet, .pakiet-gl, .okr, .lnk, #nav a, .dodaj-wiersz, .wk { transition: transform var(--ruch-klik) var(--ease-wyjscie); }
-  .kafel:active, .mini:active, .alert:active, .pakiet:active { transform: scale(.97); }
+  .poz, .pl, .chip, .btn-czarny, .btn-jasny, .mini, .alert, .pakiet, .pakiet-gl, .okr, .lnk, #nav a, .dodaj-wiersz, .wk { transition: transform var(--ruch-klik) var(--ease-wyjscie); }
+  .mini:active, .alert:active, .pakiet:active { transform: scale(.97); }
   .poz:active, .pl:active, .wk:active, .pakiet-gl:active { transform: scale(.985); }
   .chip:active, .btn-czarny:active, .btn-jasny:active, .okr:active, .lnk:active, #nav a:active, .dodaj-wiersz:active { transform: scale(.94); }
   .tag.pop { animation: pop .6s var(--ease-sprezyna); }
   .farba.wznosi { animation: farba-w var(--ruch-farba) var(--ease-sprezyna) both; animation-delay: calc(var(--i, 0) * var(--ruch-farba-odstep)); }
-  .domek-farba.wznosi { animation: domek-w var(--ruch-farba) var(--ease-sprezyna) both; }
   .sz { animation: mieni var(--ruch-mieni) linear infinite; }
   @keyframes farba-w { from { height: var(--od); } }
-  @keyframes domek-w { from { transform: translateY(var(--od-dy)); } }
   @keyframes mieni { to { background-position: -200% 0; } }
   #toast:not([hidden]) { animation: toast-in var(--ruch-sredni) var(--ease-sprezyna); }
   ::view-transition-group(*) { animation-duration: var(--ruch-sredni); animation-timing-function: var(--ease-wyjscie); }
