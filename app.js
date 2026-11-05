@@ -209,19 +209,6 @@ function probnik(x) {
   if (stan === "zakonczone" || stan === "pelny") return `<span class="probnik probnik-pelny" style="${styl}" aria-hidden="true">${ikona("ok", 20)}</span>`;
   return `<span class="probnik" style="${styl}" aria-hidden="true">${farbaEl("sw-" + x.p.id, stan === "pakiet" ? 100 : Logika.poziomFarby(x.zapl, x.plan))}</span>`;
 }
-/* Wiersz pomieszczenia na Dom: kropka w kolorze, nazwa, kilka pozycji, po prawej „zostało” i „wydane X z Y”,
-   pod spodem cienki pasek wydanego planu (czerwony, gdy ponad plan). */
-function wierszGrupy(r, xs, g) {
-  const b = barwy(r.id), ponad = g.plan > 0 && g.zapl > g.plan;
-  const nazwy = xs.slice(0, 3).map((x) => x.p.nazwa).join(", ") + (xs.length > 3 ? ` i ${xs.length - 3} więcej` : "");
-  const duza = !g.n ? "—" : g.plan ? kw(g.zostalo) : g.zapl ? `<span class="tag uwaga">bez planu</span>` : kw(0);
-  const mala = !g.n ? "brak pozycji" : ponad ? `ponad plan o ${zl(g.zapl - g.plan)}` : g.zapl ? (g.plan ? `wydane ${zZ(g.zapl, g.plan)}` : `wydane ${zl(g.zapl)}`) : g.plan ? `nic nie wydane z ${zl(g.plan)}` : "bez planu";
-  return `<a class="poz grupa" href="#pom/${esc(encodeURIComponent(r.id))}" style="--farba:${b.farba}">
-    <span class="poz-t"><span class="poz-n"><span class="kropka" style="background:${b.farba}" aria-hidden="true"></span>${esc(r.nazwa)}</span>${nazwy ? `<span class="poz-m">${esc(nazwy)}</span>` : ""}</span>
-    <span class="poz-c"><span class="poz-v">${duza}</span><span class="poz-p ${ponad ? "zle" : ""}">${mala}</span></span>
-    ${g.n ? `<span class="pasek" aria-hidden="true"><i class="${ponad ? "zle" : ""}" style="width:${Logika.poziomFarby(g.zapl, g.plan)}%"></i></span>` : ""}
-  </a>`;
-}
 /* Po prawej zawsze to samo: duża kwota „zostało”, pod nią „wydane X z Y”. Pozycja w pakiecie i pozycja
    bez planu nie mają własnego „zostało” (liczy je pakiet albo nie ma z czym porównać), więc pokazują wydane. */
 function wierszPozycji(x, gdzie) {
@@ -246,7 +233,7 @@ function wierszPlatnosci(pl, bezPozycji) {
 const naglowek = (tytul, wstecz, prawy = "") => `<header class="top">${wstecz ? `<a class="okr" href="${esc(wstecz)}" aria-label="Wstecz">${ikona("wstecz")}</a>` : ""}<h1>${tytul}</h1>${prawy}</header>`;
 
 /* Szkielet w kształcie ekranu głównego, zanim przyjdą dane (zamiast „Wczytywanie…”). */
-const szkielet = () => `<div class="szkielet" role="status" aria-busy="true"><span class="vh">Wczytywanie danych…</span><span class="sz sz-tekst"></span><span class="sz sz-tytul"></span><span class="sz sz-hero"></span><span class="sz sz-tekst"></span><span class="sz sz-lista"></span></div>`;
+const szkielet = () => `<div class="szkielet" role="status" aria-busy="true"><span class="vh">Wczytywanie danych…</span><span class="sz sz-tekst"></span><span class="sz sz-tytul"></span><span class="sz sz-hero"></span><span class="sz sz-tekst"></span><span class="sz-kafle">${'<span class="sz sz-kafel"></span>'.repeat(4)}</span></div>`;
 
 /* ---------- ekran: Dom ---------- */
 function ekranDom() {
@@ -268,12 +255,16 @@ function ekranDom() {
     const kwota = uwagi.reduce((a, x) => a + (x.ponad ? x.zapl - x.plan : x.zapl), 0) + pakPonad.reduce((a, g) => a + g.zapl - g.plan, 0);
     h += `<a class="alert" href="#lista/uwaga"><span class="alert-i" aria-hidden="true">!</span><span><b>${uwagi.length + pakPonad.length} ${uwagi.length + pakPonad.length === 1 ? "pozycja" : "pozycje"} poza planem</b><span>${zl(kwota)} ponad plany: ${[...pakPonad.map((g) => g.pk.nazwa), ...uwagi.map((x) => x.p.nazwa)].map(esc).join(", ")}</span></span>${ikona("strzalka", 20)}</a>`;
   }
-  /* Lista zamiast kafli: pomieszczenia od największej kwoty do zapłaty, w każdym wierszu te same dwie kwoty. */
   const grupy = new Map();
-  for (const x of w) { if (!grupy.has(x.p.pom)) grupy.set(x.p.pom, []); grupy.get(x.p.pom).push(x); }
-  const wiersze = pom().map((r) => { const xs = grupy.get(r.id) || []; return { r, xs, s: suma(xs) }; })
-    .sort((a, b) => b.s.zostalo - a.s.zostalo || b.s.zapl - a.s.zapl || b.s.n - a.s.n);
-  h += `<div class="sekcja-h"><h2>Na co jeszcze pójdą pieniądze</h2><a class="lnk" href="#ustawienia">Edytuj</a></div><div class="karta lista-poz">${wiersze.map(({ r, xs, s: g }) => wierszGrupy(r, xs, g)).join("")}</div>`;
+  for (const x of w) { const k = pom().some((r) => r.id === x.p.pom) ? x.p.pom : ""; if (!grupy.has(k)) grupy.set(k, []); grupy.get(k).push(x); }
+  const kafle = pom().map((r) => ({ r, s: suma(grupy.get(r.id) || []) }));
+  h += `<div class="sekcja-h"><h2>Pomieszczenia</h2><a class="lnk" href="#ustawienia">Edytuj</a></div><div class="kafle">${kafle.map(({ r, s: g }, i) => `
+    <a class="kafel" href="#pom/${esc(encodeURIComponent(r.id))}" style="${zmienneBarw(barwy(r.id))}">
+      ${farbaEl("dom-pom-" + r.id, Logika.poziomFarby(g.zapl, g.plan), i)}
+      <span class="kafel-t"><span class="okr-b">${ikonaPom(r.id)}</span><span class="kafel-n">${esc(r.nazwa)}</span></span>
+      <span class="kafel-v">${kw(g.zostalo)}</span>
+      <span class="kafel-s">${!g.n ? "brak pozycji" : !g.plan ? "bez planu" : g.zapl > g.plan ? `ponad plan o ${zl(g.zapl - g.plan)}` : `zostało z ${zl(g.plan)}`}</span>
+    </a>`).join("")}</div>`;
   if (S.pakiety.size) h += `<div class="sekcja-h"><h2>Pakiety</h2></div>${[...S.pakiety.values()].map((g) => `
     <a class="pakiet" href="#lista/pakiet:${esc(g.pk.id)}"><span class="probnik" style="${zmienneBarw(barwy(najczestszyPokoj(g.xs)))}" aria-hidden="true">${farbaEl("dom-pak-" + g.pk.id, Logika.poziomFarby(g.zapl, g.plan))}</span>
     <span class="pakiet-t"><span class="pakiet-g"><span class="pakiet-n">${esc(g.pk.nazwa)}</span><span class="pakiet-v">${kw(g.zostalo)}</span></span>
@@ -730,10 +721,10 @@ async function odswiez() {
 function wire() {
   window.addEventListener("hashchange", () => {
     if (!document.startViewTransition || bezRuchu() || S.sheet || !S.gotowe) return render();
-    /* Nazwę przejścia ma stale tylko karta główna. Wiersz, który prowadzi do nowego ekranu
+    /* Nazwę przejścia ma stale tylko karta główna. Kafel albo wiersz, który prowadzi do nowego ekranu
        (albo z którego przyszliśmy), dostaje ją na chwilę, żeby nie robić zrzutu każdego wiersza listy. */
     const nazwa = (e) => (e.typ === "pom" || e.typ === "poz") ? Logika.nazwaPrzejscia(e.typ, e.id) : null;
-    const link = (e) => [...document.querySelectorAll("#ekran a.poz[href]")].find((a) => a.getAttribute("href") === `#${e.typ}/${encodeURIComponent(e.id)}`);
+    const link = (e) => [...document.querySelectorAll("#ekran a.kafel[href], #ekran a.poz[href]")].find((a) => a.getAttribute("href") === `#${e.typ}/${encodeURIComponent(e.id)}`);
     const stara = S.ekran, nowa = trasa();
     const doNowej = nazwa(nowa) && link(nowa); if (doNowej) doNowej.style.viewTransitionName = nazwa(nowa);
     /* Przejście bywa pomijane (szybkie podwójne stuknięcie, obrót telefonu). Ekran i tak się zmienia,

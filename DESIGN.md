@@ -1,6 +1,6 @@
 # System wyglądu: Koszty wykończenia domu
 
-Aplikacja na telefon. Inspiracja: pastelowe karty z dużym zaokrągleniem, czarne pigułki, pływający czarny pasek (zdjęcie z Pinteresta). Główny pomysł to **„Farba”**: kolor pomieszczenia wypełnia jego kartę od dołu tak, jak wydawane są pieniądze. Pusta karta oznacza, że nic jeszcze nie wydano, a pełna, że plan jest wykorzystany. Ekran główny (od 5 lis 2026) jest prostszy: jedna kwota „Zostało pieniędzy” z jednym zdaniem i lista pomieszczeń zamiast kafli; w każdym wierszu aplikacji po prawej są te same dwie kwoty: duża „zostało”, mała „wydane X z Y”. Wszystkie wartości są tokenami w `:root` w `index.html`. W regułach CSS nie wpisujemy kolorów ani rozmiarów na sztywno.
+Aplikacja na telefon. Inspiracja: pastelowe karty z dużym zaokrągleniem, czarne pigułki, pływający czarny pasek (zdjęcie z Pinteresta). Główny pomysł to **„Farba”**: kolor pomieszczenia wypełnia jego kartę od dołu tak, jak wydawane są pieniądze. Pusta karta oznacza, że nic jeszcze nie wydano, a pełna, że plan jest wykorzystany. Ekran główny (od 5 lis 2026) ma u góry jedną kwotę „Zostało pieniędzy” z jednym zdaniem, pod nią kafle pomieszczeń; w każdym wierszu pozycji po prawej są te same dwie kwoty: duża „zostało”, mała „wydane X z Y”. Wszystkie wartości są tokenami w `:root` w `index.html`. W regułach CSS nie wpisujemy kolorów ani rozmiarów na sztywno.
 
 ## Tokeny
 
@@ -12,8 +12,8 @@ Aplikacja na telefon. Inspiracja: pastelowe karty z dużym zaokrągleniem, czarn
 | `--czern` | `#000000` | tekst, przyciski główne, pasek nawigacji |
 | `--tekst-2` | `#55555C` | tekst pomocniczy na białym i na tle (7,4:1 i 6,5:1) |
 | `--linia` | `#E4E4EB` | linie między wierszami |
-| `--zolty`, `--lawenda` | `#F8DA6B`, `#C8C4F4` | karta główna na Dom, aktywna ikona paska, pasek wydanego planu bez koloru pomieszczenia; lawenda w szkielecie |
-| `PASTELE` (app.js) | 10 kolorów | kolor pomieszczenia: farba kart i próbników, kropki, pasek w wierszu pomieszczenia |
+| `--zolty`, `--lawenda` | `#F8DA6B`, `#C8C4F4` | karta główna na Dom, aktywna ikona paska; lawenda w szkielecie |
+| `PASTELE` (app.js) | 10 kolorów | kolor pomieszczenia: farba kafli i kart, próbniki, kropki |
 | `--zle`, `--zle-tlo`, `--zle-tekst` | `#C62F23`, `#FADAD6`, `#A3241A` | przekroczenia, błędy (plakietka 5,7:1) |
 | `--ok`, `--ok-tlo` | `#1E7445`, `#D7F0E0` | zakończone, kupione, zapas |
 | `--uwaga` | `#FBD2AE` | „poza planem” |
@@ -37,15 +37,15 @@ Granicę farby tworzą dwa odcienie, bez kreski: Robert wybrał to w stroiku 5 p
 - Kwoty: liczba dużą czcionką, „zł” jako `<small>` (0,62em). Cyfry równej szerokości.
 
 ### Kształty i odstępy
-- Promienie: `--r-duzy` 28 (karty główne, arkusz), `--r-sredni` 22 (karty list, kafel budżetu w ustawieniach), `--r-maly` 16 (pola, próbniki, awatar). Przyciski i chipy to pełna pigułka (99px).
-- Kolumna max 520 px, margines 16 px, odstęp między kartami 12 px, nad sekcją 28 px.
+- Promienie: `--r-duzy` 28 (karty główne, arkusz), `--r-sredni` 22 (karty list, kafel budżetu w ustawieniach), `--r-kafel` 21 (kafle pomieszczeń), `--r-maly` 16 (pola, próbniki, awatar). Przyciski i chipy to pełna pigułka (99px).
+- Kolumna max 520 px, margines 16 px, odstęp między kaflami 12 px, nad sekcją 28 px.
 - Każdy element do stuknięcia ma co najmniej 44×44 px.
 
 ## Komponenty
 | Komponent | Klasa | Kiedy |
 |---|---|---|
 | Karta główna | `.hero` | jedna na ekran, najważniejsza liczba. Na Dom żółta `.hero-glowna`: „Zostało pieniędzy”, jedno zdanie `.hero-zdanie` (do zapłaty, brakuje albo zapas, wydane z budżetu) i link „Zmień budżet”; na pomieszczeniu i pozycji `.farbowana` (farba w kolorze pomieszczenia) |
-| Wiersz pomieszczenia | `.poz.grupa` | lista na Dom od największej kwoty do zapłaty: kropka w kolorze, nazwa, do trzech pozycji, po prawej „zostało” i „wydane X z Y”, pod spodem `.pasek` wydanego planu (czerwony ponad plan). Bez planu: plakietka „bez planu” zamiast kwoty |
+| Kafel pomieszczenia | `.kafel` | siatka 2 kolumny na Dom: ikona, nazwa, „zostało”, farba od dołu |
 | Kafel budżetu | `.mini` | tylko w ustawieniach: budżet wykończenia |
 | Próbnik | `.probnik` | mały kwadrat 46 px przed nazwą pozycji i pakietu: ściana i farba; ✓ gdy zakończone lub plan wykorzystany, „!” gdy poza planem |
 | Wiersz pozycji | `.poz` | próbnik, nazwa, pomieszczenie i kategoria, po prawej duża kwota „zostało” i mała „wydane X z Y”. Pozycja w pakiecie i bez planu nie ma własnego „zostało”, więc pokazuje wydane |
@@ -59,7 +59,7 @@ Granicę farby tworzą dwa odcienie, bez kreski: Robert wybrał to w stroiku 5 p
 | Plakietka | `.tag` (`.ok`, `.zle`, `.uwaga`) | stan pozycji lub produktu |
 | Szkielet | `.szkielet` | zamiast „Wczytywanie…”: szare bloki w kształcie ekranu głównego |
 
-Postęp w kartach i próbnikach pokazuje farba. Jedyny pasek to cienki `.pasek` (4 px) pod wierszem pomieszczenia na Dom, bo lista nie ma miejsca na farbę.
+Pasków postępu nie ma (Robert: „nie pasują”). Postęp pokazuje farba.
 
 ## Ruch
 Zasada: ruch odpowiada na działanie użytkownika albo na zmianę danych. Sam z siebie dzieje się tylko jeden moment: farba wznosi się przy pierwszym otwarciu ekranu głównego. Przy „Ogranicz ruch” w systemie wszystko jest wyłączone (`prefers-reduced-motion`).
@@ -70,17 +70,17 @@ Zasada: ruch odpowiada na działanie użytkownika albo na zmianę danych. Sam z 
 | `--ruch-szybki` | 180 ms | zamykanie arkusza, zanik |
 | `--ruch-sredni` | 300 ms | wjazd arkusza, przejścia ekranów, komunikat |
 | `--ruch-wolny` | 900 ms | liczniki kwot |
-| `--ruch-farba` | 0,95 s | wznoszenie farby w kartach i próbnikach |
-| `--ruch-farba-odstep` | 50 ms | opóźnienie między kolejnymi elementami z farbą |
+| `--ruch-farba` | 0,95 s | wznoszenie farby w kaflach, kartach i próbnikach |
+| `--ruch-farba-odstep` | 50 ms | opóźnienie między kolejnymi kaflami |
 | `--ruch-mieni` | 1,3 s | migotanie szkieletu |
 | `--ease-wyjscie` | `cubic-bezier(.2,.8,.2,1)` | domyślna krzywa |
 | `--ease-sprezyna` | `cubic-bezier(.34,1.56,.64,1)` | „podskok”: wznoszenie farby, komunikat, plakietka kupione |
 
 Efekty:
-1. **Przejście wiersz → ekran** (View Transitions): wiersz pomieszczenia zamienia się w kartę główną, wiersz pozycji w kartę pozycji. Nazwy przejść tylko z `Logika.nazwaPrzejscia`. Pominięte przejście (szybkie stuknięcia, obrót) jest ciche.
+1. **Przejście kafel → ekran** (View Transitions): kafel pomieszczenia zamienia się w kartę główną, wiersz pozycji w kartę pozycji. Nazwy przejść tylko z `Logika.nazwaPrzejscia`. Pominięte przejście (szybkie stuknięcia, obrót) jest ciche.
 2. **Liczniki kwot** (`kwL` + `Logika.wartoscLicznika`): przy pierwszym otwarciu Dom kwoty nabijają się od zera, później tylko przy zmianie, od starej do nowej wartości. Ostatnie wartości są w `S.liczby`.
-3. **Farba się wznosi** (`farbaEl`): przy pierwszym otwarciu Dom od zera (próbnik pakietu), później tylko przy zmianie, od poprzedniego poziomu. Poziomy są w `S.farby`, osobno od kwot.
-4. **Wciśnięcia** na wierszach, przyciskach i chipach.
+3. **Farba się wznosi** (`farbaEl`): przy pierwszym otwarciu Dom od zera, później tylko przy zmianie, od poprzedniego poziomu. Poziomy są w `S.farby`, osobno od kwot.
+4. **Wciśnięcia** na kaflach, wierszach, przyciskach i chipach.
 5. **Arkusz** wjeżdża i zjeżdża, a zasłona płynnie się pojawia i znika.
 6. **Komunikat sukcesu** wskakuje od góry z żółtym ptaszkiem.
 7. **„kupione”** podskakuje, gdy produkt właśnie dostał płatność.
@@ -101,7 +101,7 @@ Robert otwiera aplikację na telefonie i jednym spojrzeniem widzi, ile wydał w 
 | Karta pomieszczenia `.hero.farbowana` | min. wys. 196 px, `--r-duzy` | od dołu | brak | kwota u góry, podpis „wydane X z Y (P%)” na dole |
 | Karta pozycji `.hero-poz` | padding dołu 60 px na podpis | od dołu | brak | trzy liczby u góry, „wydane P% planu” przyklejone do dołu |
 | Próbnik `.probnik` | 46×46 px, `--r-maly` | od dołu | brak | brak |
-| Pasek `.pasek` (Dom) | 4 px, cała szerokość wiersza | od lewej, `width: N%`, kolor pomieszczenia; `--zle` ponad plan | brak | brak |
+| Kafel `.kafel` | min. wys. 164 px, padding 14/14/16, `--r-kafel` | od dołu, `height: N%` | brak | góra: ikona, nazwa, kwota „zostało”, podpis |
 
 ### Stany próbnika
 | Stan | Warunek | Wygląd |
@@ -118,13 +118,14 @@ Stan wybiera `Logika.stanProbnika`, w tej kolejności: zakończone → poza plan
 ### Podpisy
 | Miejsce | Brak pozycji | Bez planu | W planie | Ponad plan |
 |---|---|---|---|---|
-| Wiersz pomieszczenia (Dom) | „brak pozycji”, kwota „—” | plakietka „bez planu”, „wydane X” | „wydane X z Y” albo „nic nie wydane z Y” | „ponad plan o X” |
+| Kafel | „brak pozycji” | „bez planu” | „zostało z X” | „ponad plan o X” |
 | Karta pomieszczenia | „brak pozycji” | „wydane X, bez planu” | „wydane X z Y (P%)” | „wydane X z Y (P%)”, P > 100 |
 | Karta pozycji | – | brak podpisu | „wydane P% planu” | „wydane P% planu”, P > 100 |
 
 ### Ruch
 | Element | Kiedy | Animacja | Czas | Krzywa |
 |---|---|---|---|---|
+| Farba kafli | pierwsze otwarcie Dom; zmiana danych | `height` od poprzedniego poziomu (`--od`) | `--ruch-farba`, kolejne kafle co `--ruch-farba-odstep` | `--ease-sprezyna` (lekko przeskakuje i osiada) |
 | Farba kart i próbników | zmiana danych | jak wyżej, bez opóźnienia | `--ruch-farba` | `--ease-sprezyna` |
 | Szkielet | czekanie na dane | przesuwany połysk | `--ruch-mieni`, w pętli | liniowa |
 
@@ -139,15 +140,14 @@ Powrót na ekran bez zmiany danych nie uruchamia żadnej animacji.
 
 ### Dostępność
 - Farba i próbniki są tylko wizualne (`aria-hidden`). Te same informacje są w tekście obok: kwota, „z X”, „ponad plan o X”, „zakończone”.
-- Pasek pod wierszem pomieszczenia jest tylko wizualny (`aria-hidden`); te same liczby są w podpisie.
 - Szkielet to `role="status"` z ukrytym tekstem „Wczytywanie danych…”.
 - Tekst na farbie i ścianie: czerń albo `--tusz-2`, kontrast co najmniej 6,3:1 dla wszystkich pasteli.
-- Kolejność fokusu na Dom: „Zmień budżet”, ostrzeżenie, wiersze pomieszczeń od największej kwoty do zapłaty, pakiety, „Komu płacisz”, zakup domu, pasek nawigacji.
+- Kolejność fokusu na Dom: „Zmień budżet”, ostrzeżenie, kafle w kolejności pomieszczeń, pakiety, „Komu płacisz”, zakup domu, pasek nawigacji.
 
 ## Ekrany i przejścia
 ```mermaid
 flowchart LR
-  Dom["#dom<br>Zostało pieniędzy, lista pomieszczeń, pakiety"] -->|wiersz| Pom["#pom/id<br>pozycje pomieszczenia"]
+  Dom["#dom<br>Zostało pieniędzy, kafle, pakiety"] -->|kafel| Pom["#pom/id<br>pozycje pomieszczenia"]
   Pom -->|wiersz| Poz["#poz/id<br>płatności i produkty"]
   Dom -->|pakiet, ostrzeżenie| Lista["#lista<br>wszystkie pozycje"]
   Lista -->|wiersz| Poz

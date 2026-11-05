@@ -35,6 +35,7 @@
   --f-tekst: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --r-duzy: 28px;
   --r-sredni: 22px;
+  --r-kafel: 21px;
   --r-maly: 16px;
   /* stany */
   --zle-tlo: #FADAD6; --zle-tekst: #A3241A;
@@ -108,8 +109,8 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .hero-zdanie b.zle { color: var(--zle); }
 .hero-glowna .lnk { justify-self: start; margin-top: 6px; min-height: 36px; }
 /* „Farba”: kolor pomieszczenia wypełnia element od dołu; granicę tworzą dwa odcienie, bez kreski */
-.farbowana { position: relative; overflow: hidden; isolation: isolate; background: var(--sciana); }
-.farbowana > :not(.farba), .probnik > :not(.farba) { position: relative; }
+.farbowana, .kafel { position: relative; overflow: hidden; isolation: isolate; background: var(--sciana); }
+.farbowana > :not(.farba), .kafel > :not(.farba), .probnik > :not(.farba) { position: relative; }
 .farba { position: absolute; left: 0; right: 0; bottom: 0; background: var(--farba); pointer-events: none; }
 .hero-dol { margin-top: 4px; font-weight: 600; color: var(--czern); }
 .farbowana.hero-poz { align-content: start; padding-bottom: 60px; }
@@ -144,7 +145,8 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .sz-tekst { width: 46%; height: 16px; border-radius: 8px; }
 .sz-tytul { width: 62%; height: 32px; border-radius: 10px; margin-bottom: 8px; }
 .sz-hero { height: 150px; border-radius: var(--r-duzy); }
-.sz-lista { height: 300px; }
+.sz-kafle { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sz-kafel { height: 150px; border-radius: var(--r-kafel); }
 .mini { border: 0; text-align: left; border-radius: var(--r-sredni); padding: 16px; display: grid; gap: 2px; align-content: start; cursor: pointer; min-width: 0; }
 .mini-y { background: var(--zolty); }
 .mini-l { margin: 0; font-weight: 600; font-size: var(--t-s); }
@@ -164,13 +166,13 @@ small { font-size: .62em; font-weight: 600; letter-spacing: 0; }
 .sekcja-h h2 { margin: 0; font: 700 var(--t-xl)/1.1 var(--f-disp); letter-spacing: -.015em; }
 .lnk { display: inline-flex; align-items: center; min-height: 44px; border: 0; background: none; padding: 0 4px; font-weight: 700; font-size: var(--t-s); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 
-/* wiersze pomieszczeń na Dom */
-/* wiersz pomieszczenia na Dom: bez próbnika, z paskiem wydanego planu na całą szerokość */
-.poz.grupa { grid-template-columns: minmax(0, 1fr) auto; }
-.poz.grupa .poz-n { display: flex; align-items: center; gap: 8px; }
-.pasek { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--tlo); overflow: hidden; margin-top: 2px; }
-.pasek i { display: block; height: 100%; background: var(--farba, var(--zolty)); }
-.pasek i.zle { background: var(--zle); }
+/* kafle pomieszczeń */
+.kafle { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.kafel { border-radius: var(--r-kafel); padding: 14px 14px 16px; display: grid; grid-template-rows: auto auto auto 1fr; gap: 2px; min-width: 0; min-height: 164px; }
+.kafel-t { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; min-width: 0; }
+.kafel-n { font-weight: 700; font-size: var(--t-m); line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
+.kafel-v { font: 800 var(--t-xl)/1.05 var(--f-disp); letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kafel-s { font-size: var(--t-xs); color: var(--tusz-2); font-weight: 500; }
 .okr-b { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.75); display: grid; place-items: center; flex: none; }
 .okr-b.duza { width: 64px; height: 64px; }
 .okr-b.duza .ik { width: 30px; height: 30px; }
@@ -291,8 +293,8 @@ textarea.pole { resize: vertical; }
   #zaslona:not([hidden]) { animation: zanik-in var(--ruch-szybki) ease-out; }
   #zaslona.zamyka { animation: zanik-out var(--ruch-szybki) ease-in forwards; }
   #zaslona.zamyka #arkusz { animation: zjazd var(--ruch-szybki) ease-in forwards; }
-  .poz, .pl, .chip, .btn-czarny, .btn-jasny, .mini, .alert, .pakiet, .pakiet-gl, .okr, .lnk, #nav a, .dodaj-wiersz, .wk { transition: transform var(--ruch-klik) var(--ease-wyjscie); }
-  .mini:active, .alert:active, .pakiet:active { transform: scale(.97); }
+  .kafel, .poz, .pl, .chip, .btn-czarny, .btn-jasny, .mini, .alert, .pakiet, .pakiet-gl, .okr, .lnk, #nav a, .dodaj-wiersz, .wk { transition: transform var(--ruch-klik) var(--ease-wyjscie); }
+  .kafel:active, .mini:active, .alert:active, .pakiet:active { transform: scale(.97); }
   .poz:active, .pl:active, .wk:active, .pakiet-gl:active { transform: scale(.985); }
   .chip:active, .btn-czarny:active, .btn-jasny:active, .okr:active, .lnk:active, #nav a:active, .dodaj-wiersz:active { transform: scale(.94); }
   .tag.pop { animation: pop .6s var(--ease-sprezyna); }
